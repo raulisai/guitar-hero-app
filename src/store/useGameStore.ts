@@ -26,6 +26,7 @@ interface GameStore {
 
   // Visual beat tracking
   currentBeatBounds: BeatBounds | null
+  currentTabBounds: BeatBounds | null
   failedBeatOverlays: FailedBeatOverlay[]
 
   // Master mode: callback to resume AlphaTab playback
@@ -45,6 +46,7 @@ interface GameStore {
   setDetectedNote: (note: DetectedNote | null) => void
   setLatencyOffset: (offset: number) => void
   setCurrentBeatBounds: (bounds: BeatBounds | null) => void
+  setCurrentTabBounds: (bounds: BeatBounds | null) => void
   markCurrentBeatFailed: () => void
   setResumePlayback: (fn: () => void) => void
   evaluateNote: () => void
@@ -78,6 +80,7 @@ export const useGameStore = create<GameStore>()(
       currentBar: 0,
       currentBeat: 0,
       currentBeatBounds: null,
+      currentTabBounds: null,
       failedBeatOverlays: [],
       resumePlayback: null,
       attempts: [],
@@ -90,6 +93,7 @@ export const useGameStore = create<GameStore>()(
       setDetectedNote: (note) => set({ detectedNote: note }),
       setLatencyOffset: (offset) => set({ latencyOffset: offset, isCalibrated: true }),
       setCurrentBeatBounds: (bounds) => set({ currentBeatBounds: bounds }),
+      setCurrentTabBounds: (bounds) => set({ currentTabBounds: bounds }),
       setResumePlayback: (fn) => set({ resumePlayback: fn }),
       markCurrentBeatFailed: () => {
         const { currentBeatBounds, expectedNote, failedBeatOverlays } = get()
@@ -175,6 +179,7 @@ export const useGameStore = create<GameStore>()(
           currentBar: 0,
           currentBeat: 0,
           currentBeatBounds: null,
+          currentTabBounds: null,
           failedBeatOverlays: [],
         }),
     }),

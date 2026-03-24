@@ -2,20 +2,26 @@ import { useEffect, useRef, useCallback } from 'react'
 import { useGameStore } from '../store/useGameStore'
 
 const EVALUATION_WINDOW = 150   // ms — reproduction mode
-const MASTER_TIMEOUT = 6000     // ms — max time to play the note in master mode
+const MASTER_TIMEOUT = 5000     // ms — max wait per note
+const MASTER_WRONG_DELAY = 600  // ms — brief pause after wrong note
+const NOTE_TOLERANCE = 1        // semitones — ±1 accepted as match
+const STABLE_FRAMES = 2         // consecutive frames required before accepting note
 
 export function useGameLoop() {
   const evaluationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const masterTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastEvaluatedKey = useRef<string>('')
   const masterWaitActive = useRef(false)
+  const stableCountRef = useRef(0)
+  const lastDetectedMidiRef = useRef<number | null>(null)
 
-  const { gameState, gameMode, expectedNote, detectedNote, evaluateNote } =
-    useGameStore()
+  const { gameState, gameMode, expectedNote, evaluateNote } = useGameStore()
 
-  // Clears timers, evaluates, marks failed beats, and resumes AlphaTab
-  const advanceMaster = useCallback(() => {
+  // Evaluate result, mark failed beats, and resume AlphaTab
+  const evaluateAndResume = useCallback(() => {
     masterWaitActive.current = false
+    stableCountRef.current = 0
+    lastDetectedMidiRef.current = null
     if (masterTimeoutRef.current) {
       clearTimeout(masterTimeoutRef.current)
       masterTimeoutRef.current = null
@@ -28,12 +34,6 @@ export function useGameLoop() {
     }
     setTimeout(() => useGameStore.getState().resumePlayback?.(), 300)
   }, [evaluateNote])
-
-  // Helper: evaluate current note and, in master mode, resume playback
-  const evaluateAndResume = useCallback((isMaster: boolean) => {
-    if (isMaster && !masterWaitActive.current) return
-    advanceMaster()
-  }, [advanceMaster])
 
   // ─── Reproduction mode ────────────────────────────────────────────────────
   useEffect(() => {
@@ -56,7 +56,7 @@ export function useGameLoop() {
     }
   }, [expectedNote, gameState, gameMode, evaluateNote])
 
-  // ─── Master mode: start wait window on new note ───────────────────────────
+  // ─── Master mode: start wait window on new beat ───────────────────────────
   useEffect(() => {
     if (gameMode !== 'master') return
     if (gameState !== 'paused') return
@@ -67,44 +67,69 @@ export function useGameLoop() {
 
     masterWaitActive.current = true
     lastEvaluatedKey.current = beatKey
+    stableCountRef.current = 0
+    lastDetectedMidiRef.current = null
 
     masterTimeoutRef.current = setTimeout(() => {
-      evaluateAndResume(true)
+      if (masterWaitActive.current) evaluateAndResume()
     }, MASTER_TIMEOUT)
 
     return () => {
-      if (masterTimeoutRef.current) clearTimeout(masterTimeoutRef.current)
+      if (masterTimeoutRef.current) {
+        clearTimeout(masterTimeoutRef.current)
+        masterTimeoutRef.current = null
+      }
     }
   }, [expectedNote, gameState, gameMode, evaluateAndResume])
 
-  // ─── Master mode: detect note during wait ────────────────────────────────
+  // ─── Master mode: real-time note detection via Zustand subscribe ──────────
+  // Uses subscribe instead of useEffect to bypass React batching and avoid
+  // stale gameState timing issues. Fires on every detectedNote change.
   useEffect(() => {
     if (gameMode !== 'master') return
-    if (gameState !== 'paused') return
-    if (!masterWaitActive.current) return
-    if (!detectedNote || detectedNote.clarity < 0.85) return
-    if (!expectedNote) return
 
-    const isMatch = Math.abs(detectedNote.midi - expectedNote.midi) <= 1
-    if (isMatch) {
-      // Correct note → advance immediately
-      advanceMaster()
-    } else {
-      // Wrong note → lock out re-entry, show feedback 500 ms then advance with fail
-      masterWaitActive.current = false
-      if (masterTimeoutRef.current) clearTimeout(masterTimeoutRef.current)
-      masterTimeoutRef.current = setTimeout(() => {
-        masterTimeoutRef.current = null
-        advanceMaster()
-      }, 500)
-    }
-  }, [detectedNote, gameMode, gameState, expectedNote, advanceMaster])
+    const unsubscribe = useGameStore.subscribe(
+      (state) => state.detectedNote,
+      (detectedNote) => {
+        if (!masterWaitActive.current) return
+        const { expectedNote: expected } = useGameStore.getState()
+        if (!expected) return
+        if (!detectedNote || detectedNote.clarity < 0.85) return
+
+        // Require STABLE_FRAMES consecutive frames of the same MIDI before accepting
+        if (detectedNote.midi === lastDetectedMidiRef.current) {
+          stableCountRef.current++
+        } else {
+          lastDetectedMidiRef.current = detectedNote.midi
+          stableCountRef.current = 1
+        }
+        if (stableCountRef.current < STABLE_FRAMES) return
+
+        const isMatch = Math.abs(detectedNote.midi - expected.midi) <= NOTE_TOLERANCE
+        if (isMatch) {
+          evaluateAndResume()
+        } else {
+          // Wrong note — lock out re-entry, show feedback then advance with fail
+          masterWaitActive.current = false
+          if (masterTimeoutRef.current) clearTimeout(masterTimeoutRef.current)
+          masterTimeoutRef.current = setTimeout(() => {
+            masterTimeoutRef.current = null
+            evaluateAndResume()
+          }, MASTER_WRONG_DELAY)
+        }
+      }
+    )
+
+    return unsubscribe
+  }, [gameMode, evaluateAndResume])
 
   // ─── Reset on song stop ────────────────────────────────────────────────────
   useEffect(() => {
     if (gameState === 'idle' || gameState === 'finished') {
       lastEvaluatedKey.current = ''
       masterWaitActive.current = false
+      stableCountRef.current = 0
+      lastDetectedMidiRef.current = null
     }
   }, [gameState])
 }

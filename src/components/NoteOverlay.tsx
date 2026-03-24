@@ -1,7 +1,7 @@
 import { useGameStore } from '../store/useGameStore'
 
 export function NoteOverlay() {
-  const { currentBeatBounds, failedBeatOverlays, gameState, gameMode } = useGameStore()
+  const { currentBeatBounds, currentTabBounds, failedBeatOverlays, gameState, gameMode } = useGameStore()
 
   const isActive = gameState === 'playing' || (gameMode === 'master' && gameState === 'paused')
 
@@ -14,7 +14,7 @@ export function NoteOverlay() {
         zIndex: 5,
       }}
     >
-      {/* Current note — green highlight */}
+      {/* Current beat — green column highlight over notation staff */}
       {isActive && currentBeatBounds && (
         <div
           style={{
@@ -23,10 +23,26 @@ export function NoteOverlay() {
             top: currentBeatBounds.y,
             width: currentBeatBounds.w,
             height: currentBeatBounds.h,
-            background: 'rgba(34, 197, 94, 0.28)',
-            border: '1px solid rgba(34, 197, 94, 0.6)',
+            background: 'rgba(34, 197, 94, 0.18)',
+            border: '1px solid rgba(34, 197, 94, 0.5)',
             borderRadius: 3,
-            boxShadow: '0 0 6px rgba(34, 197, 94, 0.4)',
+          }}
+        />
+      )}
+
+      {/* TAB fret highlight — solid square on the fret number */}
+      {isActive && currentTabBounds && (
+        <div
+          style={{
+            position: 'absolute',
+            left: currentTabBounds.x,
+            top: currentTabBounds.y,
+            width: currentTabBounds.w,
+            height: currentTabBounds.h,
+            background: 'rgba(34, 197, 94, 0.35)',
+            border: '2px solid rgba(34, 197, 94, 0.9)',
+            borderRadius: 4,
+            boxShadow: '0 0 8px rgba(34, 197, 94, 0.6)',
           }}
         />
       )}

@@ -7,6 +7,16 @@ import type { ExpectedNote } from '../types'
 const MASTER_VOLUME_MUTED = 0
 const MASTER_VOLUME_NORMAL = 1
 
+// Standard guitar range: E2 (MIDI 40) to E6 (MIDI 88)
+const GUITAR_MIDI_MIN = 40
+const GUITAR_MIDI_MAX = 88
+
+function clampToGuitarMidi(midi: number): number {
+  while (midi < GUITAR_MIDI_MIN) midi += 12
+  while (midi > GUITAR_MIDI_MAX) midi -= 12
+  return midi
+}
+
 const { PlayerState } = alphaTab.synth
 type PositionChangedEventArgs = alphaTab.synth.PositionChangedEventArgs
 type PlayerStateChangedEventArgs = alphaTab.synth.PlayerStateChangedEventArgs
@@ -50,7 +60,7 @@ export function useAlphaTab(
   const gameMode = useGameStore(s => s.gameMode)
   const {
     setExpectedNote, setGameState, updatePosition,
-    setCurrentBeatBounds, setResumePlayback,
+    setCurrentBeatBounds, setCurrentTabBounds, setResumePlayback,
   } = useGameStore()
 
   const getOrCreateApi = useCallback(() => {
@@ -82,6 +92,11 @@ export function useAlphaTab(
         const beat = lookupResult.beat
         const beatKey = `${beat.voice.bar.index}-${beat.index}`
 
+        const mainNote = beat.notes.reduce((prev, curr) =>
+          prev.realValue < curr.realValue ? prev : curr
+        )
+        const midi = clampToGuitarMidi(mainNote.realValue)
+
         // Track visual bounds for note overlays
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const boundsLookup = (api as any).renderer?.boundsLookup
@@ -89,12 +104,22 @@ export function useAlphaTab(
         if (beatBounds?.realBounds) {
           const { x, y, w, h } = beatBounds.realBounds
           setCurrentBeatBounds({ x, y, w, h })
-        }
 
-        const mainNote = beat.notes.reduce((prev, curr) =>
-          prev.realValue < curr.realValue ? prev : curr
-        )
-        const midi = mainNote.realValue
+          // TAB note bounds: from beatBounds.notes, pick the entry with the
+          // largest y (lowest on screen = TAB staff, below notation staff)
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const allNoteBounds: any[] = beatBounds.notes ?? []
+          const tabEntry = allNoteBounds
+            .filter((nb: any) => nb.noteHeadBounds)
+            .sort((a: any, b: any) => b.noteHeadBounds.y - a.noteHeadBounds.y)[0]
+          if (tabEntry?.noteHeadBounds) {
+            const nb = tabEntry.noteHeadBounds
+            // Ensure minimum size so the square is always visible
+            setCurrentTabBounds({ x: nb.x - 2, y: nb.y - 2, w: Math.max(nb.w + 4, 18), h: Math.max(nb.h + 4, 18) })
+          } else {
+            setCurrentTabBounds(null)
+          }
+        }
 
         setExpectedNote({
           midi,
@@ -129,7 +154,7 @@ export function useAlphaTab(
     })
 
     return api
-  }, [containerRef, scrollRef, setExpectedNote, setGameState, updatePosition, setCurrentBeatBounds, setResumePlayback])
+  }, [containerRef, scrollRef, setExpectedNote, setGameState, updatePosition, setCurrentBeatBounds, setCurrentTabBounds, setResumePlayback])
 
   const loadSong = useCallback(
     (file?: File | string) => {
