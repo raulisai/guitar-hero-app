@@ -3,6 +3,7 @@ import { ScoreViewer, type ScoreViewerHandle } from './components/ScoreViewer'
 import { PitchOverlay } from './components/PitchOverlay'
 import { Calibration } from './components/Calibration'
 import { BottomBar } from './components/BottomBar'
+import { DebugLog } from './components/DebugLog'
 import { useGameLoop } from './hooks/useGameLoop'
 import { useGameStore } from './store/useGameStore'
 import { DEMO_SONGS, DEFAULT_DEMO, type DemoSong } from './demoSongs'
@@ -15,6 +16,7 @@ export default function App() {
   )
   const [showCalibration, setShowCalibration] = useState(false)
   const [showDemoMenu, setShowDemoMenu] = useState(false)
+  const [showDebugLog, setShowDebugLog] = useState(false)
   const [tempo, setTempoState] = useState(100)
   const scoreRef = useRef<ScoreViewerHandle>(null)
   const { isCalibrated, gameMode, setGameMode, resetGame } = useGameStore()
@@ -45,14 +47,6 @@ export default function App() {
     },
     [isCalibrated]
   )
-
-  if (showCalibration) {
-    return (
-      <div className="flex items-center justify-center" style={{ height: '100svh', background: '#111' }}>
-        <Calibration onComplete={() => setShowCalibration(false)} />
-      </div>
-    )
-  }
 
   return (
     <div className="flex flex-col" style={{ height: '100svh', background: '#111' }}>
@@ -160,7 +154,7 @@ export default function App() {
       <div
         className="relative"
         style={{ flex: 1, overflow: 'hidden' }}
-        onClick={() => showDemoMenu && setShowDemoMenu(false)}
+        onClick={() => { showDemoMenu && setShowDemoMenu(false); showCalibration && setShowCalibration(false) }}
       >
         <ScoreViewer ref={scoreRef} file={songFile} />
 
@@ -168,6 +162,20 @@ export default function App() {
         <div className="absolute top-3 right-3" style={{ zIndex: 10 }}>
           <PitchOverlay />
         </div>
+
+        {/* Debug log — bottom-right corner */}
+        {showDebugLog && <DebugLog onClose={() => setShowDebugLog(false)} />}
+
+        {/* Calibration panel — centered overlay */}
+        {showCalibration && (
+          <div
+            className="absolute inset-0 flex items-center justify-center"
+            style={{ background: '#000000cc', zIndex: 20 }}
+            onClick={(e) => e.target === e.currentTarget && setShowCalibration(false)}
+          >
+            <Calibration onComplete={() => setShowCalibration(false)} />
+          </div>
+        )}
       </div>
 
       {/* ── Bottom control bar ─────────────────────────── */}
@@ -180,6 +188,8 @@ export default function App() {
         onTempoChange={(r) => scoreRef.current?.setTempo(r)}
         onTempoInput={setTempoState}
         onFileUpload={handleFileUpload}
+        showDebugLog={showDebugLog}
+        onToggleDebugLog={() => setShowDebugLog((v) => !v)}
       />
     </div>
   )

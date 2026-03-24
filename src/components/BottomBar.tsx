@@ -10,6 +10,8 @@ interface BottomBarProps {
   hasFile: boolean
   tempo: number
   onTempoInput: (v: number) => void
+  showDebugLog: boolean
+  onToggleDebugLog: () => void
 }
 
 export function BottomBar({
@@ -21,8 +23,10 @@ export function BottomBar({
   hasFile,
   tempo,
   onTempoInput,
+  showDebugLog,
+  onToggleDebugLog,
 }: BottomBarProps) {
-  const { gameState, score, currentBar, currentBeat, attempts } = useGameStore()
+  const { gameState, gameMode, score, currentBar, currentBeat, attempts, waitMode, setWaitMode } = useGameStore()
   const isPlaying = gameState === 'playing'
   const lastAttempt = attempts[attempts.length - 1]
 
@@ -148,6 +152,39 @@ export function BottomBar({
 
       {/* Spacer */}
       <div className="flex-1" />
+
+      {/* Debug log toggle */}
+      <button
+        onClick={onToggleDebugLog}
+        title="Mostrar/ocultar log de notas"
+        className="text-xs px-2.5 py-1 rounded transition-colors font-mono"
+        style={{
+          background: showDebugLog ? '#22c55e22' : 'transparent',
+          color: showDebugLog ? '#22c55e' : '#444',
+          border: `1px solid ${showDebugLog ? '#22c55e44' : '#2a2a2a'}`,
+        }}
+        onMouseEnter={(e) => { if (!showDebugLog) e.currentTarget.style.color = '#888' }}
+        onMouseLeave={(e) => { if (!showDebugLog) e.currentTarget.style.color = '#444' }}
+      >
+        LOG
+      </button>
+
+      {/* Wait mode toggle — only in master mode */}
+      {gameMode === 'master' && (
+        <label
+          className="flex items-center gap-1.5 cursor-pointer select-none text-xs"
+          style={{ color: waitMode ? '#22c55e' : '#666' }}
+        >
+          <input
+            type="checkbox"
+            checked={waitMode}
+            onChange={(e) => setWaitMode(e.target.checked)}
+            className="w-3.5 h-3.5 cursor-pointer"
+            style={{ accentColor: '#22c55e' }}
+          />
+          Esperar
+        </label>
+      )}
 
       {/* Upload */}
       <label

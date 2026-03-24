@@ -17,6 +17,8 @@ interface GameStore {
   // Audio
   latencyOffset: number
   isCalibrated: boolean
+  noiseFloor: number      // auto-calibrated ambient RMS threshold
+  waitMode: boolean       // master mode: wait indefinitely for user to play
 
   // Real-time notes
   expectedNote: ExpectedNote | null
@@ -45,6 +47,8 @@ interface GameStore {
   setExpectedNote: (note: ExpectedNote | null) => void
   setDetectedNote: (note: DetectedNote | null) => void
   setLatencyOffset: (offset: number) => void
+  setNoiseFloor: (floor: number) => void
+  setWaitMode: (v: boolean) => void
   setCurrentBeatBounds: (bounds: BeatBounds | null) => void
   setCurrentTabBounds: (bounds: BeatBounds | null) => void
   markCurrentBeatFailed: () => void
@@ -75,6 +79,8 @@ export const useGameStore = create<GameStore>()(
       songDuration: 0,
       latencyOffset: 0,
       isCalibrated: false,
+      noiseFloor: 0.01,
+      waitMode: false,
       expectedNote: null,
       detectedNote: null,
       currentBar: 0,
@@ -92,6 +98,8 @@ export const useGameStore = create<GameStore>()(
       setExpectedNote: (note) => set({ expectedNote: note }),
       setDetectedNote: (note) => set({ detectedNote: note }),
       setLatencyOffset: (offset) => set({ latencyOffset: offset, isCalibrated: true }),
+      setNoiseFloor: (floor) => set({ noiseFloor: floor }),
+      setWaitMode: (v) => set({ waitMode: v }),
       setCurrentBeatBounds: (bounds) => set({ currentBeatBounds: bounds }),
       setCurrentTabBounds: (bounds) => set({ currentTabBounds: bounds }),
       setResumePlayback: (fn) => set({ resumePlayback: fn }),
@@ -187,6 +195,7 @@ export const useGameStore = create<GameStore>()(
       partialize: (state) => ({
         latencyOffset: state.latencyOffset,
         isCalibrated: state.isCalibrated,
+        noiseFloor: state.noiseFloor,
       }),
     }
   )

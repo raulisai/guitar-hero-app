@@ -11,7 +11,7 @@ export function useGameLoop() {
   const masterTimeoutRef   = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastEvaluatedKey   = useRef<string>('')
 
-  const { gameState, gameMode, expectedNote, evaluateNote } = useGameStore()
+  const { gameState, gameMode, waitMode, expectedNote, evaluateNote } = useGameStore()
 
   // ─── Reproduction mode ────────────────────────────────────────────────────
   useEffect(() => {
@@ -43,6 +43,7 @@ export function useGameLoop() {
     if (gameMode !== 'master') return
     if (gameState !== 'paused') return
     if (!expectedNote) return
+    if (waitMode) return   // "Esperar" checked — wait indefinitely for user input
 
     const beatKey = `${expectedNote.bar}-${expectedNote.beat}`
     if (beatKey === lastEvaluatedKey.current) return
@@ -67,7 +68,7 @@ export function useGameLoop() {
       clearTimeout(timeout)
       masterTimeoutRef.current = null
     }
-  }, [expectedNote, gameState, gameMode, evaluateNote])
+  }, [expectedNote, gameState, gameMode, waitMode, evaluateNote])
 
   // ─── Master mode: real-time note detection ────────────────────────────────
   // Zustand v5: subscribe takes a single (state, prevState) => void listener.

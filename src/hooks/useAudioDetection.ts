@@ -1,3 +1,4 @@
+// @refresh reset
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { PitchDetector } from 'pitchy'
 import { useGameStore } from '../store/useGameStore'
@@ -8,8 +9,6 @@ const CLARITY_THRESHOLD = 0.85
 // Guitar range: E2 (82 Hz) to high E (1318 Hz) with a bit of margin
 const MIN_FREQUENCY = 70
 const MAX_FREQUENCY = 1400
-// RMS energy gate: guitar pluck is typically 0.02–0.3; ambient noise <0.01
-const MIN_RMS = 0.01
 // High-pass cutoff to remove power-line hum and low-frequency room rumble
 const HIGHPASS_CUTOFF_HZ = 70
 
@@ -25,7 +24,9 @@ export function useAudioDetection() {
   const streamRef = useRef<MediaStream | null>(null)
   const animFrameRef = useRef<number>(0)
 
-  const { setDetectedNote } = useGameStore()
+  const { setDetectedNote, noiseFloor } = useGameStore()
+  const noiseFloorRef = useRef(noiseFloor)
+  noiseFloorRef.current = noiseFloor
 
   // sampleRate passed as arg to avoid an extra useRef that changes hook count
   const startDetectionLoop = useCallback(
@@ -40,7 +41,7 @@ export function useAudioDetection() {
         for (let i = 0; i < buffer.length; i++) sum += buffer[i] * buffer[i]
         const rms = Math.sqrt(sum / buffer.length)
 
-        if (rms < MIN_RMS) {
+        if (rms < noiseFloorRef.current) {
           setDetectedNote(null)
           animFrameRef.current = requestAnimationFrame(detect)
           return
@@ -144,5 +145,28 @@ export function useAudioDetection() {
     return () => { stopListening() }
   }, [stopListening])
 
-  return { isListening, isRequesting, error, startListening, stopListening, analyserRef }
+  // Measure average RMS over `durationMs` — for ambient noise calibration
+  const measureAmbientRms = useCallback(async (durationMs = 3000): Promise<number> => {
+    if (!analyserRef.current || !bufferRef.current) return 0
+    const analyser = analyserRef.current
+    const buffer = bufferRef.current
+    const samples: number[] = []
+    const end = performance.now() + durationMs
+
+    await new Promise<void>((resolve) => {
+      const tick = () => {
+        analyser.getFloatTimeDomainData(buffer)
+        let sum = 0
+        for (let i = 0; i < buffer.length; i++) sum += buffer[i] * buffer[i]
+        samples.push(Math.sqrt(sum / buffer.length))
+        if (performance.now() < end) requestAnimationFrame(tick)
+        else resolve()
+      }
+      requestAnimationFrame(tick)
+    })
+
+    return samples.reduce((a, b) => a + b, 0) / samples.length
+  }, [])
+
+  return { isListening, isRequesting, error, startListening, stopListening, analyserRef, measureAmbientRms }
 }

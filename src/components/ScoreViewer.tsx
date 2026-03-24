@@ -1,6 +1,7 @@
 import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
 import { useAlphaTab } from '../hooks/useAlphaTab'
 import { NoteOverlay } from './NoteOverlay'
+import { HitFeedback } from './HitFeedback'
 
 export interface ScoreViewerHandle {
   play: () => void
@@ -48,6 +49,8 @@ export const ScoreViewer = forwardRef<ScoreViewerHandle, ScoreViewerProps>(
 
           {/* Note highlight overlay — same coordinate space as AlphaTab canvas */}
           <NoteOverlay />
+          {/* Hit feedback particles — same coordinate space */}
+          <HitFeedback />
         </div>
 
         {/* Placeholder when no file */}
