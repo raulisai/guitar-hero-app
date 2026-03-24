@@ -1,0 +1,31 @@
+@import "tailwindcss";
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+  background: #111;
+  color: #e5e5e5;
+  overflow: hidden;
+}
+
+#root {
+  width: 100%;
+  height: 100svh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* AlphaTab playback cursors */
+.at-cursor-beat {
+  background: rgba(34, 197, 94, 0.9);
+}
+.at-cursor-bar {
+  background: rgba(34, 197, 94, 0.1);
+}
+.at-selection > div {
+  background: rgba(34, 197, 94, 0.15);
+}
