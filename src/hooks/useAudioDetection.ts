@@ -3,13 +3,13 @@ import { PitchDetector } from 'pitchy'
 import { useGameStore } from '../store/useGameStore'
 import { hzToMidi, midiToNoteName } from '../utils/noteUtils'
 
-const BUFFER_SIZE = 4096
-const CLARITY_THRESHOLD = 0.82
+const BUFFER_SIZE = 8192
+const CLARITY_THRESHOLD = 0.85
 // Guitar range: E2 (82 Hz) to high E (1318 Hz) with a bit of margin
 const MIN_FREQUENCY = 70
 const MAX_FREQUENCY = 1400
 // RMS energy gate: guitar pluck is typically 0.02–0.3; ambient noise <0.01
-const MIN_RMS = 0.015
+const MIN_RMS = 0.01
 // High-pass cutoff to remove power-line hum and low-frequency room rumble
 const HIGHPASS_CUTOFF_HZ = 70
 

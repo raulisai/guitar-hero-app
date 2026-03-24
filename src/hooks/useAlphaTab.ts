@@ -90,7 +90,6 @@ export function useAlphaTab(
 
       if (lookupResult?.beat && lookupResult.beat.notes.length > 0) {
         const beat = lookupResult.beat
-        const beatKey = `${beat.voice.bar.index}-${beat.index}`
 
         const mainNote = beat.notes.reduce((prev, curr) =>
           prev.realValue < curr.realValue ? prev : curr
@@ -105,17 +104,31 @@ export function useAlphaTab(
           const { x, y, w, h } = beatBounds.realBounds
           setCurrentBeatBounds({ x, y, w, h })
 
-          // TAB note bounds: from beatBounds.notes, pick the entry with the
-          // largest y (lowest on screen = TAB staff, below notation staff)
+          // TAB note bounds: find all note heads on the TAB staff (bottom part of the screen)
+          // and combine their bounds so the rectangle covers the entire chord accurately.
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const allNoteBounds: any[] = beatBounds.notes ?? []
-          const tabEntry = allNoteBounds
-            .filter((nb: any) => nb.noteHeadBounds)
-            .sort((a: any, b: any) => b.noteHeadBounds.y - a.noteHeadBounds.y)[0]
-          if (tabEntry?.noteHeadBounds) {
-            const nb = tabEntry.noteHeadBounds
-            // Ensure minimum size so the square is always visible
-            setCurrentTabBounds({ x: nb.x - 2, y: nb.y - 2, w: Math.max(nb.w + 4, 18), h: Math.max(nb.h + 4, 18) })
+          const withHeads = allNoteBounds.filter((nb: any) => nb.noteHeadBounds)
+          if (withHeads.length > 0) {
+            const maxY = Math.max(...withHeads.map((nb: any) => nb.noteHeadBounds.y))
+            // TAB notes are those near maxY (e.g., within 100px, covering the TAB staff height)
+            const tabEntries = withHeads.filter((nb: any) => maxY - nb.noteHeadBounds.y < 100)
+            
+            let minX = Infinity, minY = Infinity
+            let maxX = -Infinity, maxYTotal = -Infinity
+            
+            tabEntries.forEach((entry: any) => {
+               const nb = entry.noteHeadBounds
+               if (nb.x < minX) minX = nb.x
+               if (nb.y < minY) minY = nb.y
+               if (nb.x + nb.w > maxX) maxX = nb.x + nb.w
+               if (nb.y + nb.h > maxYTotal) maxYTotal = nb.y + nb.h
+            })
+            
+            const w = Math.max(maxX - minX + 4, 18)
+            const h = Math.max(maxYTotal - minY + 4, 18)
+            
+            setCurrentTabBounds({ x: minX - 2, y: minY - 2, w, h })
           } else {
             setCurrentTabBounds(null)
           }
@@ -133,9 +146,9 @@ export function useAlphaTab(
         } as ExpectedNote)
         updatePosition(beat.voice.bar.index, beat.index)
 
-        // Master mode: pause on each new note (deduplicated by beatKey)
-        const { gameMode } = useGameStore.getState()
-        if (gameMode === 'master' && beatKey !== lastMasterBeatKey.current) {
+        // Master mode: pause on each new beat so the user can play it
+        const beatKey = `${beat.voice.bar.index}-${beat.index}`
+        if (useGameStore.getState().gameMode === 'master' && beatKey !== lastMasterBeatKey.current) {
           lastMasterBeatKey.current = beatKey
           api.pause()
         }

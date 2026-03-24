@@ -26,6 +26,7 @@ export function NoteOverlay() {
             background: 'rgba(34, 197, 94, 0.18)',
             border: '1px solid rgba(34, 197, 94, 0.5)',
             borderRadius: 3,
+            transition: 'all 0.15s ease-out',
           }}
         />
       )}
@@ -43,6 +44,7 @@ export function NoteOverlay() {
             border: '2px solid rgba(34, 197, 94, 0.9)',
             borderRadius: 4,
             boxShadow: '0 0 8px rgba(34, 197, 94, 0.6)',
+            transition: 'all 0.15s ease-out',
           }}
         />
       )}

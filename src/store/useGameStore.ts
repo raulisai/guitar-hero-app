@@ -122,9 +122,7 @@ export const useGameStore = create<GameStore>()(
           const adjustedDetectedTime = detectedNote.timestamp - latencyOffset
           timeDiff = adjustedDetectedTime - expectedNote.timestamp
 
-          const noteMatch =
-            detectedNote.midi === expectedNote.midi ||
-            Math.abs(detectedNote.midi - expectedNote.midi) <= 1
+          const noteMatch = detectedNote.midi === expectedNote.midi
 
           if (!noteMatch) {
             result = 'wrong'
