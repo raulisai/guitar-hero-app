@@ -49,23 +49,28 @@ export function NoteOverlay() {
         />
       )}
 
-      {/* Failed notes — semi-transparent dark overlay so note looks faded */}
-      {failedBeatOverlays.map(({ key, bounds }) => (
-        <div
-          key={key}
-          style={{
-            position: 'absolute',
-            left: bounds.x,
-            top: bounds.y,
-            width: bounds.w,
-            height: bounds.h,
-            background: 'rgba(239, 68, 68, 0.22)',
-            border: '1px solid rgba(239, 68, 68, 0.4)',
-            borderRadius: 3,
-            opacity: 0.65,
-          }}
-        />
-      ))}
+      {/* Failed notes — fade out over successive play presses */}
+      {failedBeatOverlays.map(({ key, bounds, playCount }) => {
+        // playCount 0 → full red mark; playCount 1 → barely visible; ≥2 → removed
+        const opacity = playCount === 0 ? 0.65 : 0.2
+        return (
+          <div
+            key={key}
+            style={{
+              position: 'absolute',
+              left: bounds.x,
+              top: bounds.y,
+              width: bounds.w,
+              height: bounds.h,
+              background: 'rgba(239, 68, 68, 0.22)',
+              border: '1px solid rgba(239, 68, 68, 0.4)',
+              borderRadius: 3,
+              opacity,
+              transition: 'opacity 0.6s ease-out',
+            }}
+          />
+        )
+      })}
     </div>
   )
 }

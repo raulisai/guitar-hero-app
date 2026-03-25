@@ -137,7 +137,7 @@ export function useAlphaTab(
         setExpectedNote({
           midi,
           name: midiToNoteName(midi),
-          timestamp: args.currentTime,
+          timestamp: performance.now(),   // wall-clock ms — same base as detectedNote
           beat: beat.index,
           bar: beat.voice.bar.index,
           duration: lookupResult.duration,

@@ -19,7 +19,7 @@ export default function App() {
   const [showDebugLog, setShowDebugLog] = useState(false)
   const [tempo, setTempoState] = useState(100)
   const scoreRef = useRef<ScoreViewerHandle>(null)
-  const { isCalibrated, gameMode, setGameMode, resetGame } = useGameStore()
+  const { isCalibrated, gameMode, setGameMode, resetGame, fadeFailed } = useGameStore()
 
   useGameLoop()
 
@@ -182,7 +182,7 @@ export default function App() {
       <BottomBar
         hasFile={!!songFile}
         tempo={tempo}
-        onPlay={() => scoreRef.current?.play()}
+        onPlay={() => { fadeFailed(); scoreRef.current?.play() }}
         onPause={() => scoreRef.current?.pause()}
         onStop={() => scoreRef.current?.stop()}
         onTempoChange={(r) => scoreRef.current?.setTempo(r)}

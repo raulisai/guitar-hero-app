@@ -28,6 +28,10 @@ export function useAudioDetection() {
   const noiseFloorRef = useRef(noiseFloor)
   noiseFloorRef.current = noiseFloor
 
+  // Track note onset: when the MIDI value changes (or comes from silence), record a new onset
+  const prevMidiRef   = useRef<number | null>(null)
+  const onsetTimeRef  = useRef<number>(0)
+
   // sampleRate passed as arg to avoid an extra useRef that changes hook count
   const startDetectionLoop = useCallback(
     (analyser: AnalyserNode, detector: PitchDetector<Float32Array>, sampleRate: number) => {
@@ -42,6 +46,7 @@ export function useAudioDetection() {
         const rms = Math.sqrt(sum / buffer.length)
 
         if (rms < noiseFloorRef.current) {
+          prevMidiRef.current = null   // silence resets onset tracking
           setDetectedNote(null)
           animFrameRef.current = requestAnimationFrame(detect)
           return
@@ -55,14 +60,24 @@ export function useAudioDetection() {
           frequency <= MAX_FREQUENCY
         ) {
           const midi = hzToMidi(frequency)
+          const now = performance.now()
+
+          // New onset: coming from silence or a different note
+          if (prevMidiRef.current === null || prevMidiRef.current !== midi) {
+            onsetTimeRef.current = now
+            prevMidiRef.current = midi
+          }
+
           setDetectedNote({
             midi,
             name: midiToNoteName(midi),
             frequency,
             clarity,
-            timestamp: performance.now(),
+            timestamp: now,
+            onset: onsetTimeRef.current,
           })
         } else {
+          prevMidiRef.current = null
           setDetectedNote(null)
         }
 

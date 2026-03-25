@@ -3,7 +3,8 @@ export interface DetectedNote {
   name: string       // "E4", "A2", "G#3", etc.
   frequency: number  // exact Hz
   clarity: number    // 0-1 (>0.9 = clean note)
-  timestamp: number  // performance.now() when detected
+  timestamp: number  // performance.now() — updated every frame while ringing
+  onset: number      // performance.now() when this note STARTED (silence/diff MIDI → this MIDI)
 }
 
 export interface ExpectedNote {

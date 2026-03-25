@@ -7,9 +7,10 @@ const EVALUATION_WINDOW  = 200    // ms — window to evaluate after beat in rep
 export const MASTER_NOTE_TIMEOUT = 3000 // ms — max wait per note in master mode
 
 export function useGameLoop() {
-  const evaluationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const masterTimeoutRef   = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const lastEvaluatedKey   = useRef<string>('')
+  const evaluationTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const masterTimeoutRef    = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastEvaluatedKey    = useRef<string>('')
+  const lastEvalTimestamp   = useRef<number>(0)   // wall-clock ms when last beat was evaluated
 
   const { gameState, gameMode, waitMode, expectedNote, evaluateNote } = useGameStore()
 
@@ -53,13 +54,14 @@ export function useGameLoop() {
       if (lastEvaluatedKey.current === beatKey) return
 
       lastEvaluatedKey.current = beatKey
+      lastEvalTimestamp.current = performance.now()
       evaluateNote()
       const state = useGameStore.getState()
       const lastResult = state.attempts.at(-1)?.result
       if (lastResult === 'wrong' || lastResult === 'miss') {
         state.markCurrentBeatFailed()
       }
-      setTimeout(() => useGameStore.getState().resumePlayback?.(), 300)
+      setTimeout(() => useGameStore.getState().resumePlayback?.(), 150)
     }, MASTER_NOTE_TIMEOUT)
 
     masterTimeoutRef.current = timeout
@@ -85,12 +87,18 @@ export function useGameLoop() {
       if (gs !== 'paused') return
       if (!exp) return
       if (!detectedNote || detectedNote.clarity < 0.85) return
+      // Reject stale sustain: onset must be strictly AFTER the previous beat was evaluated.
+      // In master mode, evaluation fires almost immediately after the pluck (< 10ms), so
+      // a sustained note from beat N will have onset <= lastEvalTimestamp and be rejected.
+      // Only a fresh pluck after the last evaluation passes.
+      if (detectedNote.onset <= lastEvalTimestamp.current) return
 
       const beatKey = `${exp.bar}-${exp.beat}`
       if (lastEvaluatedKey.current === beatKey) return  // already evaluated this beat
 
       // Claim this beat before doing async work
       lastEvaluatedKey.current = beatKey
+      lastEvalTimestamp.current = performance.now()
       if (masterTimeoutRef.current) {
         clearTimeout(masterTimeoutRef.current)
         masterTimeoutRef.current = null
@@ -102,7 +110,7 @@ export function useGameLoop() {
       if (lastResult === 'wrong' || lastResult === 'miss') {
         freshState.markCurrentBeatFailed()
       }
-      setTimeout(() => useGameStore.getState().resumePlayback?.(), 300)
+      setTimeout(() => useGameStore.getState().resumePlayback?.(), 150)
     })
 
     return unsubscribe
@@ -112,6 +120,7 @@ export function useGameLoop() {
   useEffect(() => {
     if (gameState === 'idle' || gameState === 'finished') {
       lastEvaluatedKey.current = ''
+      lastEvalTimestamp.current = 0
     }
   }, [gameState])
 }
