@@ -61,7 +61,7 @@ export function useGameLoop() {
       if (lastResult === 'wrong' || lastResult === 'miss') {
         state.markCurrentBeatFailed()
       }
-      setTimeout(() => useGameStore.getState().resumePlayback?.(), 150)
+      setTimeout(() => useGameStore.getState().resumePlayback?.(), 50)
     }, MASTER_NOTE_TIMEOUT)
 
     masterTimeoutRef.current = timeout
@@ -110,7 +110,7 @@ export function useGameLoop() {
       if (lastResult === 'wrong' || lastResult === 'miss') {
         freshState.markCurrentBeatFailed()
       }
-      setTimeout(() => useGameStore.getState().resumePlayback?.(), 150)
+      setTimeout(() => useGameStore.getState().resumePlayback?.(), 50)
     })
 
     return unsubscribe
