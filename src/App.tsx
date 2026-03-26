@@ -1,12 +1,13 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { ScoreViewer, type ScoreViewerHandle } from './components/ScoreViewer'
-import { PitchOverlay } from './components/PitchOverlay'
 import { Calibration } from './components/Calibration'
 import { FloatingBar } from './components/FloatingBar'
+import { MicPill } from './components/MicPill'
 import { DebugLog } from './components/DebugLog'
 import { useGameLoop } from './hooks/useGameLoop'
 import { useGameStore } from './store/useGameStore'
 import { useMetronome } from './hooks/useMetronome'
+import { useAudioDetection } from './hooks/useAudioDetection'
 import { DEMO_SONGS, DEFAULT_DEMO, type DemoSong } from './demoSongs'
 import type { GameMode } from './types'
 
@@ -26,10 +27,28 @@ export default function App() {
   const [isMetronome, setIsMetronome] = useState(false)
   const scoreRef = useRef<ScoreViewerHandle>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const { isCalibrated, gameMode, gameState, setGameMode, resetGame, fadeFailed, songBpm } = useGameStore()
+  const { isCalibrated, gameMode, gameState, setGameMode, resetGame, fadeFailed, songBpm, micEnabled, setMicEnabled } = useGameStore()
+
+  // Audio detection — lifted to App so mic button in FloatingBar and MicPill share one instance
+  const { isListening, isRequesting, error: micError, startListening, stopListening, analyserRef } = useAudioDetection()
 
   useGameLoop()
   useMetronome(isMetronome, songBpm, tempo)
+
+  // Auto-start mic if user had it on in last session
+  useEffect(() => {
+    if (micEnabled && !isListening && !isRequesting) {
+      startListening()
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Persist mic state whenever it changes
+  useEffect(() => { setMicEnabled(isListening) }, [isListening, setMicEnabled])
+
+  const handleToggleMic = useCallback(() => {
+    if (isListening) stopListening()
+    else startListening()
+  }, [isListening, startListening, stopListening])
 
   // Loop: restart when song finishes
   useEffect(() => {
@@ -223,11 +242,6 @@ export default function App() {
       >
         <ScoreViewer ref={scoreRef} file={songFile} />
 
-        {/* Pitch detector overlay — top-right */}
-        <div className="absolute top-3 right-3" style={{ zIndex: 10 }}>
-          <PitchOverlay />
-        </div>
-
         {/* Debug log — bottom-right corner */}
         {showDebugLog && <DebugLog onClose={() => setShowDebugLog(false)} />}
 
@@ -246,6 +260,9 @@ export default function App() {
         )}
       </div>
 
+      {/* ── Mic pill — floats above the bar when mic is active ── */}
+      {isListening && <MicPill analyserRef={analyserRef} error={micError} />}
+
       {/* ── Floating control bar ────────────────────────── */}
       <FloatingBar
         hasFile={!!songFile}
@@ -263,6 +280,9 @@ export default function App() {
         onToggleMetronome={() => setIsMetronome((v) => !v)}
         onModeChange={handleModeChange}
         onReset={handleReset}
+        isListening={isListening}
+        isRequesting={isRequesting}
+        onToggleMic={handleToggleMic}
       />
     </div>
   )

@@ -20,6 +20,7 @@ interface GameStore {
   isCalibrated: boolean
   noiseFloor: number      // auto-calibrated ambient RMS threshold
   waitMode: boolean       // master mode: wait indefinitely for user to play
+  micEnabled: boolean     // persisted mic preference (auto-restart on load)
   songBpm: number
   isMuted: boolean
 
@@ -52,6 +53,7 @@ interface GameStore {
   setLatencyOffset: (offset: number) => void
   setNoiseFloor: (floor: number) => void
   setWaitMode: (v: boolean) => void
+  setMicEnabled: (v: boolean) => void
   setSongBpm: (bpm: number) => void
   setIsMuted: (v: boolean) => void
   setCurrentBeatBounds: (bounds: BeatBounds | null) => void
@@ -87,6 +89,7 @@ export const useGameStore = create<GameStore>()(
       isCalibrated: false,
       noiseFloor: 0.01,
       waitMode: false,
+      micEnabled: false,
       songBpm: 0,
       isMuted: false,
       expectedNote: null,
@@ -108,6 +111,7 @@ export const useGameStore = create<GameStore>()(
       setLatencyOffset: (offset) => set({ latencyOffset: offset, isCalibrated: true }),
       setNoiseFloor: (floor) => set({ noiseFloor: floor }),
       setWaitMode: (v) => set({ waitMode: v }),
+      setMicEnabled: (v) => set({ micEnabled: v }),
       setSongBpm: (bpm) => set({ songBpm: bpm }),
       setIsMuted: (v) => set({ isMuted: v }),
       setCurrentBeatBounds: (bounds) => set({ currentBeatBounds: bounds }),
@@ -221,6 +225,7 @@ export const useGameStore = create<GameStore>()(
         latencyOffset: state.latencyOffset,
         isCalibrated: state.isCalibrated,
         noiseFloor: state.noiseFloor,
+        micEnabled: state.micEnabled,
       }),
     }
   )

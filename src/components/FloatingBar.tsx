@@ -18,6 +18,10 @@ interface FloatingBarProps {
   onToggleMetronome: () => void
   onModeChange: (mode: GameMode) => void
   onReset: () => void
+  // mic
+  isListening: boolean
+  isRequesting: boolean
+  onToggleMic: () => void
 }
 
 export function FloatingBar({
@@ -36,6 +40,9 @@ export function FloatingBar({
   onToggleMetronome,
   onModeChange,
   onReset,
+  isListening,
+  isRequesting,
+  onToggleMic,
 }: FloatingBarProps) {
   const {
     gameState, gameMode, score, currentBar, currentBeat,
@@ -81,6 +88,25 @@ export function FloatingBar({
       )}
       <button onClick={onReset} disabled={!hasFile} title="Reiniciar" style={iconBtnStyle()}>
         <ResetIcon />
+      </button>
+
+      {/* Mic toggle */}
+      <button
+        onClick={onToggleMic}
+        disabled={isRequesting}
+        title={isListening ? 'Apagar micrófono' : 'Activar micrófono'}
+        style={{
+          width: 32, height: 32, borderRadius: '50%', border: 'none', flexShrink: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: isListening ? '#22c55e' : '#1e1e1e',
+          color: isListening ? '#000' : '#666',
+          cursor: isRequesting ? 'default' : 'pointer',
+          opacity: isRequesting ? 0.5 : 1,
+          transition: 'background 0.2s, color 0.2s',
+          boxShadow: isListening ? '0 0 8px rgba(34,197,94,0.4)' : 'none',
+        }}
+      >
+        <MicIcon />
       </button>
 
       <Divider />
@@ -256,4 +282,12 @@ function PauseIcon() {
 }
 function ResetIcon() {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+}
+function MicIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+      <path d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4zm0 2a2 2 0 0 0-2 2v6a2 2 0 0 0 4 0V5a2 2 0 0 0-2-2z"/>
+      <path d="M19 11a1 1 0 0 1 1 1 8 8 0 0 1-7 7.94V22h2a1 1 0 0 1 0 2H9a1 1 0 0 1 0-2h2v-2.06A8 8 0 0 1 4 12a1 1 0 0 1 2 0 6 6 0 0 0 12 0 1 1 0 0 1 1-1z"/>
+    </svg>
+  )
 }
