@@ -59,6 +59,7 @@ export function useAlphaTab(
   const lastMasterBeatKey = useRef<string>('')
   const lastFreeBeatKey   = useRef<string>('')   // debounce free-mode state updates
   const gameMode = useGameStore(s => s.gameMode)
+  const isMuted = useGameStore(s => s.isMuted)
   const {
     setExpectedNote, setGameState, updatePosition,
     setCurrentBeatBounds, setCurrentTabBounds, setResumePlayback,
@@ -83,6 +84,8 @@ export function useAlphaTab(
     api.renderFinished.on(() => {
       setGameState('idle')
       lastMasterBeatKey.current = ''
+      const bpm = api.score?.tempo ?? 0
+      if (bpm > 0) useGameStore.getState().setSongBpm(bpm)
     })
 
     api.playerPositionChanged.on((args: PositionChangedEventArgs) => {
@@ -226,10 +229,13 @@ export function useAlphaTab(
 
   // Mute AlphaTab output in master mode — user should play the note, not hear it
   useEffect(() => {
-    if (apiRef.current) {
-      apiRef.current.masterVolume = gameMode === 'master' ? MASTER_VOLUME_MUTED : MASTER_VOLUME_NORMAL
+    if (!apiRef.current) return
+    if (gameMode === 'master') {
+      apiRef.current.masterVolume = 0
+    } else {
+      apiRef.current.masterVolume = isMuted ? 0 : 1
     }
-  }, [gameMode])
+  }, [gameMode, isMuted])
 
   useEffect(() => {
     getOrCreateApi()
