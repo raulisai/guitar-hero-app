@@ -11,6 +11,11 @@ const MIN_FREQUENCY = 70
 const MAX_FREQUENCY = 1400
 // High-pass cutoff to remove power-line hum and low-frequency room rumble
 const HIGHPASS_CUTOFF_HZ = 70
+// Guitar lowest standard note = E2 = MIDI 40
+const MIN_GUITAR_MIDI = 40
+// If the same MIDI re-appears within this window after a signal dropout,
+// it's the same string still ringing — keep original onset
+const GAP_TOLERANCE_MS = 300
 
 export function useAudioDetection() {
   const [isListening, setIsListening] = useState(false)
@@ -29,8 +34,11 @@ export function useAudioDetection() {
   noiseFloorRef.current = noiseFloor
 
   // Track note onset: when the MIDI value changes (or comes from silence), record a new onset
-  const prevMidiRef   = useRef<number | null>(null)
-  const onsetTimeRef  = useRef<number>(0)
+  const prevMidiRef       = useRef<number | null>(null)
+  const onsetTimeRef      = useRef<number>(0)
+  // Gap-tolerant onset: track what MIDI was playing before a dropout and when
+  const lastKnownMidiRef  = useRef<number | null>(null)
+  const gapStartRef       = useRef<number>(0)
 
   // sampleRate passed as arg to avoid an extra useRef that changes hook count
   const startDetectionLoop = useCallback(
@@ -46,7 +54,11 @@ export function useAudioDetection() {
         const rms = Math.sqrt(sum / buffer.length)
 
         if (rms < noiseFloorRef.current) {
-          prevMidiRef.current = null   // silence resets onset tracking
+          if (prevMidiRef.current !== null) {
+            lastKnownMidiRef.current = prevMidiRef.current
+            gapStartRef.current = performance.now()
+          }
+          prevMidiRef.current = null
           setDetectedNote(null)
           animFrameRef.current = requestAnimationFrame(detect)
           return
@@ -59,12 +71,27 @@ export function useAudioDetection() {
           frequency >= MIN_FREQUENCY &&
           frequency <= MAX_FREQUENCY
         ) {
-          const midi = hzToMidi(frequency)
+          let midi = hzToMidi(frequency)
           const now = performance.now()
+
+          // Octave correction: autocorrelation sometimes locks onto a subharmonic
+          // when a string is plucked softly. MIDI < 40 (below E2) is outside
+          // standard guitar range — bump up one octave.
+          while (midi < MIN_GUITAR_MIDI) midi += 12
 
           // New onset: coming from silence or a different note
           if (prevMidiRef.current === null || prevMidiRef.current !== midi) {
-            onsetTimeRef.current = now
+            // Gap-tolerant: if the same MIDI re-appears after a brief signal
+            // dropout, it's the same string still ringing — keep the original
+            // onset to prevent stale notes from getting a fresh onset.
+            const isSameNoteAfterGap =
+              prevMidiRef.current === null &&
+              midi === lastKnownMidiRef.current &&
+              now - gapStartRef.current < GAP_TOLERANCE_MS
+
+            if (!isSameNoteAfterGap) {
+              onsetTimeRef.current = now
+            }
             prevMidiRef.current = midi
           }
 
@@ -77,6 +104,10 @@ export function useAudioDetection() {
             onset: onsetTimeRef.current,
           })
         } else {
+          if (prevMidiRef.current !== null) {
+            lastKnownMidiRef.current = prevMidiRef.current
+            gapStartRef.current = performance.now()
+          }
           prevMidiRef.current = null
           setDetectedNote(null)
         }

@@ -2,6 +2,7 @@ import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
 import { useAlphaTab } from '../hooks/useAlphaTab'
 import { NoteOverlay } from './NoteOverlay'
 import { HitFeedback } from './HitFeedback'
+import { Fretboard } from './Fretboard'
 
 export interface ScoreViewerHandle {
   play: () => void
@@ -51,6 +52,11 @@ export const ScoreViewer = forwardRef<ScoreViewerHandle, ScoreViewerProps>(
           <NoteOverlay />
           {/* Hit feedback particles — same coordinate space */}
           <HitFeedback />
+        </div>
+
+        {/* Fretboard Visualization below the Score/Tablature */}
+        <div style={{ position: 'sticky', left: 0, paddingBottom: '20px', zIndex: 10 }}>
+          <Fretboard />
         </div>
 
         {/* Placeholder when no file */}

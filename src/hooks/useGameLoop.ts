@@ -87,11 +87,11 @@ export function useGameLoop() {
       if (gs !== 'paused') return
       if (!exp) return
       if (!detectedNote || detectedNote.clarity < 0.85) return
-      // Reject stale sustain: onset must be strictly AFTER the previous beat was evaluated.
-      // In master mode, evaluation fires almost immediately after the pluck (< 10ms), so
-      // a sustained note from beat N will have onset <= lastEvalTimestamp and be rejected.
-      // Only a fresh pluck after the last evaluation passes.
-      if (detectedNote.onset <= lastEvalTimestamp.current) return
+      // Reject stale sustain: onset must be well AFTER the previous beat was evaluated.
+      // The 80ms cooldown gives the pitch detector buffer time to settle on the new
+      // frequency after a note change — prevents the old note from lingering in the
+      // buffer and being accepted with a fresh onset for the next beat.
+      if (detectedNote.onset < lastEvalTimestamp.current + 80) return
 
       const beatKey = `${exp.bar}-${exp.beat}`
       if (lastEvaluatedKey.current === beatKey) return  // already evaluated this beat
