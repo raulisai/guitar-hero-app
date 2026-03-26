@@ -2,13 +2,13 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import { ScoreViewer, type ScoreViewerHandle } from './components/ScoreViewer'
 import { Calibration } from './components/Calibration'
 import { FloatingBar } from './components/FloatingBar'
-import { MicPill } from './components/MicPill'
+import type { PanelView } from './components/FloatingBar'
 import { DebugLog } from './components/DebugLog'
 import { useGameLoop } from './hooks/useGameLoop'
 import { useGameStore } from './store/useGameStore'
 import { useMetronome } from './hooks/useMetronome'
 import { useAudioDetection } from './hooks/useAudioDetection'
-import { DEMO_SONGS, DEFAULT_DEMO, type DemoSong } from './demoSongs'
+import { ALL_SONGS, DEFAULT_DEMO, type DemoSong } from './demoSongs'
 import type { GameMode } from './types'
 
 type CalibrationTab = 'tuner' | 'latency'
@@ -22,6 +22,8 @@ export default function App() {
   const [calibrationTab, setCalibrationTab] = useState<CalibrationTab>('tuner')
   const [showDemoMenu, setShowDemoMenu] = useState(false)
   const [showDebugLog, setShowDebugLog] = useState(false)
+  const [panelOpen, setPanelOpen] = useState(true)
+  const [panelView, setPanelView] = useState<PanelView>('fretboard')
   const [tempo, setTempoState] = useState(100)
   const [isLooping, setIsLooping] = useState(false)
   const [isMetronome, setIsMetronome] = useState(false)
@@ -134,33 +136,42 @@ export default function App() {
 
             {showDemoMenu && (
               <div
-                className="absolute top-full mt-1 rounded-lg overflow-hidden z-50"
+                className="absolute top-full mt-1 rounded-lg z-50"
                 style={{
                   background: '#1a1a1a',
                   border: '1px solid #333',
-                  minWidth: '100%',
+                  minWidth: '220px',
                   left: 0,
                   boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+                  maxHeight: '70vh',
+                  overflowY: 'auto',
                 }}
               >
-                {DEMO_SONGS.map((song) => (
-                  <button
-                    key={song.title}
-                    onClick={() => loadDemo(song)}
-                    className="w-full text-left px-4 py-2.5 text-sm transition-colors"
-                    style={{ color: '#ccc', background: 'transparent' }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = '#252525'
-                      e.currentTarget.style.color = '#fff'
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = 'transparent'
-                      e.currentTarget.style.color = '#ccc'
-                    }}
-                  >
-                    <div style={{ color: '#fff', fontWeight: 500 }}>{song.title}</div>
-                    <div style={{ color: '#555', fontSize: '11px' }}>{song.artist}</div>
-                  </button>
+                {/* Group by artist */}
+                {[...new Set(ALL_SONGS.map(s => s.artist))].map((artist) => (
+                  <div key={artist}>
+                    <div style={{ padding: '6px 14px 2px', fontSize: 9, color: '#444', letterSpacing: '0.08em', fontWeight: 700, textTransform: 'uppercase', borderTop: '1px solid #222' }}>
+                      {artist}
+                    </div>
+                    {ALL_SONGS.filter(s => s.artist === artist).map((song) => (
+                      <button
+                        key={song.title}
+                        onClick={() => loadDemo(song)}
+                        className="w-full text-left px-4 py-2 text-sm transition-colors"
+                        style={{ color: '#ccc', background: 'transparent' }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = '#252525'
+                          e.currentTarget.style.color = '#fff'
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = 'transparent'
+                          e.currentTarget.style.color = '#ccc'
+                        }}
+                      >
+                        {song.title}
+                      </button>
+                    ))}
+                  </div>
                 ))}
               </div>
             )}
@@ -234,7 +245,7 @@ export default function App() {
       {/* ── Score area ─────────────────────────────────── */}
       <div
         className="relative"
-        style={{ flex: 1, overflow: 'hidden', paddingBottom: '70px' }}
+        style={{ flex: 1, overflow: 'hidden', paddingBottom: panelOpen ? '295px' : '82px', transition: 'padding-bottom 0.25s' }}
         onClick={() => {
           if (showDemoMenu) setShowDemoMenu(false)
           if (showCalibration) setShowCalibration(false)
@@ -260,10 +271,7 @@ export default function App() {
         )}
       </div>
 
-      {/* ── Mic pill — floats above the bar when mic is active ── */}
-      {isListening && <MicPill analyserRef={analyserRef} error={micError} />}
-
-      {/* ── Floating control bar ────────────────────────── */}
+      {/* ── Floating control bar (includes mic info row when active) ── */}
       <FloatingBar
         hasFile={!!songFile}
         tempo={tempo}
@@ -283,6 +291,12 @@ export default function App() {
         isListening={isListening}
         isRequesting={isRequesting}
         onToggleMic={handleToggleMic}
+        analyserRef={analyserRef}
+        micError={micError}
+        panelOpen={panelOpen}
+        panelView={panelView}
+        onTogglePanel={() => setPanelOpen(v => !v)}
+        onChangePanelView={setPanelView}
       />
     </div>
   )

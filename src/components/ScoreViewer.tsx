@@ -2,7 +2,6 @@ import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
 import { useAlphaTab } from '../hooks/useAlphaTab'
 import { NoteOverlay } from './NoteOverlay'
 import { HitFeedback } from './HitFeedback'
-import { Fretboard } from './Fretboard'
 import { useGameStore } from '../store/useGameStore'
 
 export interface ScoreViewerHandle {
@@ -39,8 +38,8 @@ export const ScoreViewer = forwardRef<ScoreViewerHandle, ScoreViewerProps>(
         ref={scrollRef}
         style={{
           flex: 1,
-          overflowX: 'auto',
-          overflowY: 'hidden',
+          overflowX: 'hidden',
+          overflowY: 'auto',
           background: '#111',
           position: 'relative',
         }}
@@ -53,11 +52,6 @@ export const ScoreViewer = forwardRef<ScoreViewerHandle, ScoreViewerProps>(
           {/* Overlays and hit feedback — master mode only */}
           {isMaster && <NoteOverlay />}
           {isMaster && <HitFeedback />}
-        </div>
-
-        {/* Fretboard Visualization below the Score/Tablature */}
-        <div style={{ position: 'sticky', left: 0, paddingBottom: '20px', zIndex: 10 }}>
-          <Fretboard />
         </div>
 
         {/* Placeholder when no file */}

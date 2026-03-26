@@ -9,10 +9,10 @@ const NUM_FRET_BLOCKS = NUM_FRETS + 1
 const FRET_MARKERS = [3, 5, 7, 9, 15, 17]
 const DOUBLE_MARKER = 12
 
-export function Fretboard() {
+export function Fretboard({ compact }: { compact?: boolean }) {
   const { expectedNote, gameState, gameMode } = useGameStore()
   const [showHands, setShowHands] = useState(true)
-  
+
   const isActive = gameState === 'playing' || (gameMode === 'master' && gameState === 'paused')
 
   // We only show the indicator if there is an active note played/expected
@@ -28,7 +28,7 @@ export function Fretboard() {
       style={{
         width: '100%',
         maxWidth: '1200px',
-        margin: '20px auto',
+        margin: compact ? '4px auto' : '20px auto',
         padding: '0 10px',
         position: 'relative',
         display: 'flex',
@@ -45,9 +45,9 @@ export function Fretboard() {
             background: showHands ? 'rgba(34, 197, 94, 0.2)' : 'rgba(255,255,255,0.05)',
             border: `1px solid ${showHands ? 'rgba(34, 197, 94, 0.5)' : '#444'}`,
             color: showHands ? '#22c55e' : '#aaa',
-            padding: '6px 12px',
+            padding: compact ? '3px 8px' : '6px 12px',
             borderRadius: '4px',
-            fontSize: '14px',
+            fontSize: compact ? '11px' : '14px',
             cursor: 'pointer',
             transition: 'all 0.2s',
             boxShadow: showHands ? '0 0 10px rgba(34,197,94,0.2)' : 'none',

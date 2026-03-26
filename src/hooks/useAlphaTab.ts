@@ -28,7 +28,7 @@ function buildSettings(scrollElement: HTMLElement | null): any {
       fontDirectory: '/font/',
     },
     display: {
-      layoutMode: 'horizontal',
+      layoutMode: 'page',
       staveProfile: 'scoreTab',
       resources: {
         staffLineColor: '#666666',
@@ -45,7 +45,7 @@ function buildSettings(scrollElement: HTMLElement | null): any {
       enableCursor: true,
       scrollElement: scrollElement ?? undefined,
       scrollMode: 2, // OffScreen: scrolls when cursor leaves view
-      scrollOffsetX: -150,
+      scrollOffsetY: -120,
       bufferTimeInMilliseconds: 400,
     },
   }
