@@ -3,41 +3,17 @@ import { useEffect, useRef } from 'react'
 import { useGameStore } from '../store/useGameStore'
 
 // ─── Tuneable constants ────────────────────────────────────────────────────
-const EVALUATION_WINDOW  = 200    // ms — window to evaluate after beat in reproduction
 export const MASTER_NOTE_TIMEOUT = 3000 // ms — max wait per note in master mode
 
 export function useGameLoop() {
-  const evaluationTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null)
   const masterTimeoutRef    = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastEvaluatedKey    = useRef<string>('')
   const lastEvalTimestamp   = useRef<number>(0)   // wall-clock ms when last beat was evaluated
 
   const { gameState, gameMode, waitMode, expectedNote, evaluateNote } = useGameStore()
 
-  // ─── Reproduction mode ────────────────────────────────────────────────────
-  useEffect(() => {
-    if (gameMode !== 'reproduction') return
-    if (gameState !== 'playing') return
-    if (!expectedNote) return
-
-    const beatKey = `${expectedNote.bar}-${expectedNote.beat}`
-    if (beatKey === lastEvaluatedKey.current) return
-
-    if (evaluationTimerRef.current) clearTimeout(evaluationTimerRef.current)
-    evaluationTimerRef.current = setTimeout(() => {
-      lastEvaluatedKey.current = beatKey
-      evaluateNote()
-      const state = useGameStore.getState()
-      const lastResult = state.attempts.at(-1)?.result
-      if (lastResult === 'wrong' || lastResult === 'miss') {
-        state.markCurrentBeatFailed()
-      }
-    }, EVALUATION_WINDOW)
-
-    return () => {
-      if (evaluationTimerRef.current) clearTimeout(evaluationTimerRef.current)
-    }
-  }, [expectedNote, gameState, gameMode, evaluateNote])
+    // Free (reproduction) mode has no evaluation — music just plays through.
+  // All scoring logic lives in master mode below.
 
   // ─── Master mode: timeout (miss if no note in time) ───────────────────────
   useEffect(() => {

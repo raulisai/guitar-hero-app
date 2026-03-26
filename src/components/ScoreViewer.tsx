@@ -3,6 +3,7 @@ import { useAlphaTab } from '../hooks/useAlphaTab'
 import { NoteOverlay } from './NoteOverlay'
 import { HitFeedback } from './HitFeedback'
 import { Fretboard } from './Fretboard'
+import { useGameStore } from '../store/useGameStore'
 
 export interface ScoreViewerHandle {
   play: () => void
@@ -23,6 +24,7 @@ export const ScoreViewer = forwardRef<ScoreViewerHandle, ScoreViewerProps>(
     const containerRef = useRef<HTMLDivElement>(null)
 
     const { initialize, play, pause, stop, setTempo } = useAlphaTab(containerRef, scrollRef)
+  const isMaster = useGameStore(s => s.gameMode === 'master')
 
     useImperativeHandle(ref, () => ({ play, pause, stop, setTempo }), [play, pause, stop, setTempo])
 
@@ -48,10 +50,9 @@ export const ScoreViewer = forwardRef<ScoreViewerHandle, ScoreViewerProps>(
           {/* AlphaTab render target */}
           <div ref={containerRef} style={{ minHeight: '200px' }} />
 
-          {/* Note highlight overlay — same coordinate space as AlphaTab canvas */}
-          <NoteOverlay />
-          {/* Hit feedback particles — same coordinate space */}
-          <HitFeedback />
+          {/* Overlays and hit feedback — master mode only */}
+          {isMaster && <NoteOverlay />}
+          {isMaster && <HitFeedback />}
         </div>
 
         {/* Fretboard Visualization below the Score/Tablature */}
