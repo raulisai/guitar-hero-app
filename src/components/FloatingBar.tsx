@@ -36,6 +36,9 @@ interface FloatingBarProps {
   panelView: PanelView
   onTogglePanel: () => void
   onChangePanelView: (v: PanelView) => void
+  // auto-hide
+  barHidden: boolean
+  onShowBar: () => void
 }
 
 export function FloatingBar({
@@ -48,6 +51,7 @@ export function FloatingBar({
   isListening, isRequesting, onToggleMic,
   analyserRef, micError,
   panelOpen, panelView, onTogglePanel, onChangePanelView,
+  barHidden, onShowBar,
 }: FloatingBarProps) {
   const {
     gameState, gameMode, score, currentBar, currentBeat,
@@ -94,21 +98,33 @@ export function FloatingBar({
     return () => cancelAnimationFrame(frameRef.current)
   }, [isListening, analyserRef])
 
-  return (
-    <div style={{
-      position: 'fixed', bottom: 14, left: '50%', transform: 'translateX(-50%)',
-      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
-      zIndex: 100, userSelect: 'none',
-    }}>
+  // Panel stays visible for fretboard/keyboard even when controls are hidden
+  const showPanel = panelOpen && (!barHidden || panelView === 'fretboard' || panelView === 'keyboard')
 
-      {/* ── Panel card (when open) ── */}
-      {panelOpen && (
+  return (
+    // ── Dock — full-width shelf anchored to the bottom ──────────────────
+    <div
+      style={{
+        position: 'fixed', bottom: 0, left: 0, right: 0,
+        zIndex: 100, userSelect: 'none',
+        display: 'flex', flexDirection: 'column', alignItems: 'stretch',
+        gap: barHidden ? 4 : 8,
+        padding: barHidden ? '5px 16px 5px' : '14px 16px 12px',
+        background: barHidden ? 'rgba(9,9,9,0.35)' : 'rgba(9,9,9,0.93)',
+        boxShadow: barHidden ? 'none' : '0 -40px 56px 8px rgba(9,9,9,0.82)',
+        backdropFilter: barHidden ? 'blur(6px)' : 'blur(22px)',
+        WebkitBackdropFilter: barHidden ? 'blur(6px)' : 'blur(22px)',
+        borderTop: barHidden ? '1px solid rgba(255,255,255,0.03)' : '1px solid rgba(255,255,255,0.05)',
+        transition: 'all 0.45s cubic-bezier(0.4,0,0.2,1)',
+      }}>
+
+      {/* ── Panel card — sits inside the dock ── */}
+      {showPanel && (
         <div style={{
           width: 'min(900px, calc(100vw - 32px))',
-          background: 'rgba(14,14,14,0.97)',
-          backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)',
-          borderRadius: 16, border: '1px solid #2a2a2a',
-          boxShadow: '0 8px 40px rgba(0,0,0,0.7)',
+          marginLeft: 'auto', marginRight: 'auto',
+          background: 'rgba(20,20,20,0.7)',
+          borderRadius: 12, border: '1px solid rgba(255,255,255,0.07)',
           overflow: 'hidden',
         }}>
           {/* Panel header with tabs + minimize button */}
@@ -152,33 +168,52 @@ export function FloatingBar({
         </div>
       )}
 
-      {/* ── Bar row ── */}
-      <div style={{ position: 'relative' }}>
+      {/* ── Bar row: bubble + ghost strip (hidden) OR pill (visible) ── */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%' }}>
 
-        {/* Bubble — floats to the left of the pill */}
+        {/* Bubble — always visible, shrinks when bar is hidden */}
         <button
-          onClick={onTogglePanel}
-          title={panelOpen ? 'Minimizar panel' : 'Abrir panel'}
+          onClick={barHidden ? onShowBar : onTogglePanel}
+          title={barHidden ? 'Mostrar controles' : panelOpen ? 'Minimizar panel' : 'Abrir panel'}
           style={{
-            position: 'absolute',
-            right: 'calc(100% + 8px)',
-            top: '50%',
-            transform: 'translateY(-50%)',
-            width: 40, height: 40, borderRadius: '50%',
-            border: `1px solid ${panelOpen ? '#22c55e44' : '#2a2a2a'}`,
-            background: panelOpen ? 'rgba(34,197,94,0.08)' : 'rgba(14,14,14,0.97)',
-            backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)',
-            boxShadow: panelOpen ? '0 0 12px rgba(34,197,94,0.18)' : '0 4px 16px rgba(0,0,0,0.5)',
-            color: panelOpen ? '#22c55e' : '#555',
+            width: barHidden ? 32 : 40,
+            height: barHidden ? 32 : 40,
+            borderRadius: '50%', flexShrink: 0,
+            border: `1px solid ${barHidden ? 'rgba(255,255,255,0.18)' : panelOpen ? '#22c55e44' : 'rgba(255,255,255,0.08)'}`,
+            background: barHidden ? 'rgba(255,255,255,0.06)' : panelOpen ? 'rgba(34,197,94,0.08)' : 'rgba(255,255,255,0.03)',
+            boxShadow: barHidden ? '0 2px 12px rgba(0,0,0,0.5)' : panelOpen ? '0 0 12px rgba(34,197,94,0.18)' : 'none',
+            color: barHidden ? 'rgba(255,255,255,0.55)' : panelOpen ? '#22c55e' : '#555',
             cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            transition: 'all 0.2s', flexShrink: 0,
+            transition: 'all 0.35s cubic-bezier(0.4,0,0.2,1)',
+            opacity: 1,
           }}
         >
           {panelView === 'fretboard' ? <FretboardIcon /> : panelView === 'metronome' ? <MetronomeIcon /> : <KeyboardIcon />}
         </button>
 
-        {/* The pill (existing bar) */}
+        {/* Ghost strip — replaces pill when bar is hidden */}
+        {barHidden && !isMaster && (
+          <GhostStrip
+            onRestore={onShowBar}
+            expectedNote={expectedNote}
+            detectedNote={detectedNote}
+            isMetronome={isMetronome}
+            currentBeat={currentBeat}
+            matches={matches}
+          />
+        )}
+
+        {/* Collapsible pill — visible when bar is shown */}
+        <div style={{
+          maxHeight: barHidden ? 0 : 300,
+          overflow: 'hidden',
+          opacity: barHidden ? 0 : 1,
+          transition: 'max-height 0.45s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease',
+          borderRadius: 20,
+        }}>
+
+        {/* The pill */}
         <div style={{
           background: 'rgba(16,16,16,0.97)',
           backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)',
@@ -370,7 +405,79 @@ export function FloatingBar({
 
           </div>
         </div>
-      </div>
+        </div>{/* end collapsible */}
+      </div>{/* end bar row flex */}
+    </div>
+  )
+}
+
+// ── Ghost strip ────────────────────────────────────────────────────────
+function GhostStrip({ onRestore, expectedNote, detectedNote, isMetronome, currentBeat, matches }: {
+  onRestore: () => void
+  expectedNote: { name: string } | null
+  detectedNote: { name: string } | null
+  isMetronome: boolean
+  currentBeat: number
+  matches: boolean
+}) {
+  const beatIdx = currentBeat % 4
+  return (
+    <div
+      onClick={onRestore}
+      onMouseEnter={onRestore}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 6,
+        padding: '5px 14px',
+        borderRadius: 20,
+        background: 'rgba(255,255,255,0.06)',
+        border: '1px solid rgba(255,255,255,0.12)',
+        boxShadow: '0 2px 12px rgba(0,0,0,0.45)',
+        cursor: 'pointer',
+        whiteSpace: 'nowrap',
+        opacity: 0.75,
+        transition: 'opacity 0.2s',
+      }}
+      onMouseEnter={e => { onRestore(); (e.currentTarget as HTMLDivElement).style.opacity = '1' }}
+      onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.opacity = '0.6' }}
+    >
+      {/* Expected note */}
+      <span style={{ fontSize: 11, fontWeight: 600, color: 'rgba(59,130,246,0.7)', lineHeight: 1 }}>
+        {expectedNote?.name ?? '—'}
+      </span>
+
+      {/* Match indicator */}
+      <span style={{ fontSize: 10, color: matches ? 'rgba(34,197,94,0.7)' : 'rgba(255,255,255,0.12)', transition: 'color 0.15s' }}>
+        {matches ? '✓' : '·'}
+      </span>
+
+      {/* Detected note */}
+      <span style={{ fontSize: 11, fontWeight: 600, lineHeight: 1,
+        color: matches ? 'rgba(34,197,94,0.7)' : detectedNote ? 'rgba(200,200,200,0.5)' : 'rgba(255,255,255,0.12)' }}>
+        {detectedNote?.name ?? '—'}
+      </span>
+
+      {/* Metronome beat dots */}
+      {isMetronome && (
+        <>
+          <div style={{ width: 1, height: 10, background: 'rgba(255,255,255,0.06)', flexShrink: 0 }} />
+          {[0, 1, 2, 3].map(i => (
+            <div key={i} style={{
+              width: i === 0 ? 6 : 4, height: i === 0 ? 6 : 4,
+              borderRadius: '50%', flexShrink: 0,
+              background: beatIdx === i
+                ? (i === 0 ? 'rgba(34,197,94,0.7)' : 'rgba(200,200,200,0.6)')
+                : 'rgba(255,255,255,0.08)',
+              transition: 'background 0.06s',
+            }} />
+          ))}
+        </>
+      )}
+
+      {/* Up chevron hint */}
+      <svg viewBox="0 0 16 10" width="10" height="7" fill="none"
+        stroke="rgba(255,255,255,0.18)" strokeWidth="2.5" strokeLinecap="round">
+        <polyline points="1 8 8 2 15 8" />
+      </svg>
     </div>
   )
 }

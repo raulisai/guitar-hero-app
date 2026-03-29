@@ -3,11 +3,13 @@ import { ScoreViewer, type ScoreViewerHandle } from './components/ScoreViewer'
 import { Calibration } from './components/Calibration'
 import { FloatingBar } from './components/FloatingBar'
 import type { PanelView } from './components/FloatingBar'
+import { OrientationGuard } from './components/OrientationGuard'
 import { DebugLog } from './components/DebugLog'
 import { useGameLoop } from './hooks/useGameLoop'
 import { useGameStore } from './store/useGameStore'
 import { useMetronome } from './hooks/useMetronome'
 import { useAudioDetection } from './hooks/useAudioDetection'
+import { useAutoHide } from './hooks/useAutoHide'
 import { ALL_SONGS, DEFAULT_DEMO, type DemoSong } from './demoSongs'
 import type { GameMode } from './types'
 
@@ -30,6 +32,7 @@ export default function App() {
   const scoreRef = useRef<ScoreViewerHandle>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { isCalibrated, gameMode, gameState, setGameMode, resetGame, fadeFailed, songBpm, micEnabled, setMicEnabled } = useGameStore()
+  const { barHidden, showBar, hideNow } = useAutoHide(gameMode)
 
   // Audio detection — lifted to App so mic button in FloatingBar and MicPill share one instance
   const { isListening, isRequesting, error: micError, startListening, stopListening, analyserRef } = useAudioDetection()
@@ -51,6 +54,11 @@ export default function App() {
     if (isListening) stopListening()
     else startListening()
   }, [isListening, startListening, stopListening])
+
+  // When panel closes, show the bar so the bubble is reachable to reopen
+  useEffect(() => {
+    if (!panelOpen) showBar()
+  }, [panelOpen]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Loop: restart when song finishes
   useEffect(() => {
@@ -91,6 +99,7 @@ export default function App() {
 
   return (
     <div className="flex flex-col" style={{ height: '100svh', background: '#111' }}>
+      <OrientationGuard />
       {/* ── Header ─────────────────────────────────────── */}
       <header
         className="flex items-center justify-between px-5 shrink-0"
@@ -245,13 +254,23 @@ export default function App() {
       {/* ── Score area ─────────────────────────────────── */}
       <div
         className="relative"
-        style={{ flex: 1, overflow: 'hidden', paddingBottom: panelOpen ? '295px' : '82px', transition: 'padding-bottom 0.25s' }}
+        style={{
+          flex: 1, overflow: 'hidden',
+          display: 'flex', flexDirection: 'column',
+          // Dock sits at bottom:0. Single row (bubble+ghost) when hidden.
+          paddingBottom:
+            barHidden && panelOpen && panelView !== 'metronome' ? '270px' :
+            !barHidden && panelOpen ? '315px' :
+            barHidden ? '42px' :
+            '85px',
+          transition: 'padding-bottom 0.45s cubic-bezier(0.4,0,0.2,1)',
+        }}
         onClick={() => {
           if (showDemoMenu) setShowDemoMenu(false)
           if (showCalibration) setShowCalibration(false)
         }}
       >
-        <ScoreViewer ref={scoreRef} file={songFile} />
+        <ScoreViewer ref={scoreRef} file={songFile} onScroll={hideNow} />
 
         {/* Debug log — bottom-right corner */}
         {showDebugLog && <DebugLog onClose={() => setShowDebugLog(false)} />}
@@ -297,6 +316,8 @@ export default function App() {
         panelView={panelView}
         onTogglePanel={() => setPanelOpen(v => !v)}
         onChangePanelView={setPanelView}
+        barHidden={barHidden}
+        onShowBar={showBar}
       />
     </div>
   )

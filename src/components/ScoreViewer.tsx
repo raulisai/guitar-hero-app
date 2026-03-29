@@ -13,10 +13,11 @@ export interface ScoreViewerHandle {
 
 interface ScoreViewerProps {
   file: File | string | null
+  onScroll?: () => void
 }
 
 export const ScoreViewer = forwardRef<ScoreViewerHandle, ScoreViewerProps>(
-  ({ file }, ref) => {
+  ({ file, onScroll }, ref) => {
     // scrollRef = outer container with overflow-x: auto (AlphaTab scrolls this)
     const scrollRef = useRef<HTMLDivElement>(null)
     // containerRef = AlphaTab render target
@@ -36,8 +37,10 @@ export const ScoreViewer = forwardRef<ScoreViewerHandle, ScoreViewerProps>(
     return (
       <div
         ref={scrollRef}
+        onScroll={onScroll}
         style={{
           flex: 1,
+          minHeight: 0,        /* critical: lets flex shrink below content height */
           overflowX: 'hidden',
           overflowY: 'auto',
           background: '#111',
