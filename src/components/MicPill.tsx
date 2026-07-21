@@ -24,9 +24,11 @@ export function MicPill({ analyserRef, error }: MicPillProps) {
   )
 
   // Keep color ref fresh so the draw loop uses the latest state
-  colorRef.current = matches
-    ? '#22c55e'
-    : detectedNote ? '#e5e5e5' : '#444'
+  useEffect(() => {
+    colorRef.current = matches
+      ? '#22c55e'
+      : detectedNote ? '#e5e5e5' : '#444'
+  }, [matches, detectedNote])
 
   // Waveform RAF loop
   useEffect(() => {
@@ -49,7 +51,8 @@ export function MicPill({ analyserRef, error }: MicPillProps) {
       for (let i = 0; i < W; i++) {
         const s = dataRef.current[Math.floor(i * step)] ?? 0
         const y = ((s + 1) / 2) * H
-        i === 0 ? ctx.moveTo(i, y) : ctx.lineTo(i, y)
+        if (i === 0) ctx.moveTo(i, y)
+        else ctx.lineTo(i, y)
       }
       ctx.stroke()
     }

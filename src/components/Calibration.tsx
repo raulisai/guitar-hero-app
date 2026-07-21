@@ -149,7 +149,7 @@ export function Calibration({ onComplete, initialTab }: CalibrationProps) {
 
   // Live RMS meter loop
   useEffect(() => {
-    if (!isListening) { setRms(0); return }
+    if (!isListening) return
 
     const tick = () => {
       const analyser = analyserRef.current

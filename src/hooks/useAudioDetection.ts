@@ -4,18 +4,44 @@ import { PitchDetector } from 'pitchy'
 import { useGameStore } from '../store/useGameStore'
 import { hzToMidi, midiToNoteName } from '../utils/noteUtils'
 
-const BUFFER_SIZE = 8192
-const CLARITY_THRESHOLD = 0.85
+// 4096 samples keep enough low-E cycles for MPM while cutting the previous
+// analysis window roughly in half (≈93 ms at 44.1 kHz instead of ≈186 ms).
+const BUFFER_SIZE = 4096
+const CLARITY_THRESHOLD = 0.82
 // Guitar range: E2 (82 Hz) to high E (1318 Hz) with a bit of margin
 const MIN_FREQUENCY = 70
 const MAX_FREQUENCY = 1400
 // High-pass cutoff to remove power-line hum and low-frequency room rumble
-const HIGHPASS_CUTOFF_HZ = 70
+const HIGHPASS_CUTOFF_HZ = 60
 // Guitar lowest standard note = E2 = MIDI 40
 const MIN_GUITAR_MIDI = 40
 // If the same MIDI re-appears within this window after a signal dropout,
 // it's the same string still ringing — keep original onset
 const GAP_TOLERANCE_MS = 300
+const SMOOTHING_WINDOW = 5
+const MIN_STABLE_FRAMES = 2
+
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b)
+  return sorted[Math.floor(sorted.length / 2)] ?? 0
+}
+
+function correctOctaveForContext(midi: number): number {
+  const expected = useGameStore.getState().expectedNote
+  if (!expected) return midi
+
+  const candidates = [midi - 12, midi, midi + 12]
+    .filter((candidate) => candidate >= MIN_GUITAR_MIDI && candidate <= 88)
+  const contextual = candidates.reduce((best, candidate) =>
+    Math.abs(candidate - expected.midi) < Math.abs(best - expected.midi) ? candidate : best
+  , midi)
+
+  // Only correct a classic octave error. Never bend an unrelated wrong note
+  // toward the answer, which would inflate accuracy.
+  return Math.abs(contextual - expected.midi) <= 1 && Math.abs(contextual - midi) === 12
+    ? contextual
+    : midi
+}
 
 export function useAudioDetection() {
   const [isListening, setIsListening] = useState(false)
@@ -31,7 +57,7 @@ export function useAudioDetection() {
 
   const { setDetectedNote, noiseFloor } = useGameStore()
   const noiseFloorRef = useRef(noiseFloor)
-  noiseFloorRef.current = noiseFloor
+  useEffect(() => { noiseFloorRef.current = noiseFloor }, [noiseFloor])
 
   // Track note onset: when the MIDI value changes (or comes from silence), record a new onset
   const prevMidiRef       = useRef<number | null>(null)
@@ -39,6 +65,10 @@ export function useAudioDetection() {
   // Gap-tolerant onset: track what MIDI was playing before a dropout and when
   const lastKnownMidiRef  = useRef<number | null>(null)
   const gapStartRef       = useRef<number>(0)
+  const frequencyHistoryRef = useRef<number[]>([])
+  const candidateMidiRef = useRef<number | null>(null)
+  const stableFramesRef = useRef(0)
+  const missingFramesRef = useRef(0)
 
   // sampleRate passed as arg to avoid an extra useRef that changes hook count
   const startDetectionLoop = useCallback(
@@ -53,13 +83,19 @@ export function useAudioDetection() {
         for (let i = 0; i < buffer.length; i++) sum += buffer[i] * buffer[i]
         const rms = Math.sqrt(sum / buffer.length)
 
-        if (rms < noiseFloorRef.current) {
+        const adaptiveGate = Math.max(0.003, noiseFloorRef.current * 1.15)
+        if (rms < adaptiveGate) {
           if (prevMidiRef.current !== null) {
             lastKnownMidiRef.current = prevMidiRef.current
             gapStartRef.current = performance.now()
           }
-          prevMidiRef.current = null
-          setDetectedNote(null)
+          missingFramesRef.current += 1
+          if (missingFramesRef.current === 2) {
+            prevMidiRef.current = null
+            frequencyHistoryRef.current = []
+            stableFramesRef.current = 0
+            setDetectedNote(null)
+          }
           animFrameRef.current = requestAnimationFrame(detect)
           return
         }
@@ -71,13 +107,29 @@ export function useAudioDetection() {
           frequency >= MIN_FREQUENCY &&
           frequency <= MAX_FREQUENCY
         ) {
-          let midi = hzToMidi(frequency)
+          missingFramesRef.current = 0
+          frequencyHistoryRef.current = [...frequencyHistoryRef.current, frequency].slice(-SMOOTHING_WINDOW)
+          const smoothedFrequency = median(frequencyHistoryRef.current)
+          const rawMidi = hzToMidi(smoothedFrequency)
+          let midi = correctOctaveForContext(rawMidi)
+          const correctedFrequency = smoothedFrequency * Math.pow(2, (midi - rawMidi) / 12)
           const now = performance.now()
 
           // Octave correction: autocorrelation sometimes locks onto a subharmonic
           // when a string is plucked softly. MIDI < 40 (below E2) is outside
           // standard guitar range — bump up one octave.
           while (midi < MIN_GUITAR_MIDI) midi += 12
+
+          if (candidateMidiRef.current === midi) stableFramesRef.current += 1
+          else {
+            candidateMidiRef.current = midi
+            stableFramesRef.current = 1
+          }
+
+          if (stableFramesRef.current < MIN_STABLE_FRAMES) {
+            animFrameRef.current = requestAnimationFrame(detect)
+            return
+          }
 
           // New onset: coming from silence or a different note
           if (prevMidiRef.current === null || prevMidiRef.current !== midi) {
@@ -98,18 +150,27 @@ export function useAudioDetection() {
           setDetectedNote({
             midi,
             name: midiToNoteName(midi),
-            frequency,
+            frequency: correctedFrequency,
             clarity,
             timestamp: now,
             onset: onsetTimeRef.current,
+            cents: Math.round(1200 * Math.log2(correctedFrequency / (440 * Math.pow(2, (midi - 69) / 12)))),
+            rms,
+            stableFrames: stableFramesRef.current,
           })
         } else {
           if (prevMidiRef.current !== null) {
             lastKnownMidiRef.current = prevMidiRef.current
             gapStartRef.current = performance.now()
           }
-          prevMidiRef.current = null
-          setDetectedNote(null)
+          missingFramesRef.current += 1
+          if (missingFramesRef.current === 2) {
+            prevMidiRef.current = null
+            candidateMidiRef.current = null
+            stableFramesRef.current = 0
+            frequencyHistoryRef.current = []
+            setDetectedNote(null)
+          }
         }
 
         animFrameRef.current = requestAnimationFrame(detect)
@@ -124,17 +185,22 @@ export function useAudioDetection() {
     setIsRequesting(true)
     setError(null)
     try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error('MediaDevicesUnavailable')
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: false,
           noiseSuppression: false,
           autoGainControl: false,
+          channelCount: 1,
         },
       })
       streamRef.current = stream
 
       // Use native device sample rate — avoids resampling artifacts
-      const audioContext = new AudioContext()
+      const audioContext = new AudioContext({ latencyHint: 'interactive' })
       audioContextRef.current = audioContext
 
       // AudioContext might start suspended — resume it (requires user gesture, which we have)
@@ -171,7 +237,9 @@ export function useAudioDetection() {
     } catch (err) {
       const msg = (err as Error).name === 'NotAllowedError'
         ? 'Permiso denegado. Habilita el micrófono en la configuración del navegador.'
-        : 'No se pudo acceder al micrófono.'
+        : (err as Error).message === 'MediaDevicesUnavailable'
+          ? 'El micrófono requiere HTTPS o localhost en este navegador.'
+          : 'No se pudo acceder al micrófono.'
       setError(msg)
       setIsRequesting(false)
       console.error('Audio error:', err)

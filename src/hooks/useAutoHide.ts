@@ -12,7 +12,7 @@ const HIDE_DELAY_MS = 12000   // 12 s of inactivity before auto-hide
  */
 export function useAutoHide(gameMode: GameMode) {
   const [barHidden, setBarHidden] = useState(false)
-  const timerRef = useRef<ReturnType<typeof setTimeout>>()
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   const showBar = useCallback(() => {
     setBarHidden(false)
@@ -31,8 +31,8 @@ export function useAutoHide(gameMode: GameMode) {
   useEffect(() => {
     clearTimeout(timerRef.current)
     if (gameMode !== 'reproduction') {
-      setBarHidden(false)
-      return
+      timerRef.current = setTimeout(() => setBarHidden(false), 0)
+      return () => clearTimeout(timerRef.current)
     }
     timerRef.current = setTimeout(() => setBarHidden(true), HIDE_DELAY_MS)
     return () => clearTimeout(timerRef.current)

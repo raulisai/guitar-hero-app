@@ -2,12 +2,13 @@ import React, { useEffect, useRef } from 'react'
 import { useGameStore } from '../store/useGameStore'
 import type { GameMode } from '../types'
 import { Fretboard } from './Fretboard'
+import { CameraCoach } from './CameraCoach'
 
 const WV_W = 80   // waveform canvas width
 const WV_H = 18   // waveform canvas height
 const WV_BUF = 512
 
-export type PanelView = 'fretboard' | 'metronome' | 'keyboard'
+export type PanelView = 'fretboard' | 'metronome' | 'keyboard' | 'camera'
 
 interface FloatingBarProps {
   onPlay: () => void
@@ -42,7 +43,7 @@ interface FloatingBarProps {
 }
 
 export function FloatingBar({
-  onPlay, onPause, onStop: _onStop,
+  onPlay, onPause,
   onTempoChange, hasFile, tempo, onTempoInput,
   showDebugLog, onToggleDebugLog,
   isLooping, onToggleLooping,
@@ -62,14 +63,16 @@ export function FloatingBar({
   const isPlaying = gameState === 'playing'
   const isMaster  = gameMode === 'master'
 
-  const matches = !!(detectedNote && expectedNote && detectedNote.midi === expectedNote.midi)
+  const matches = !!(detectedNote && expectedNote && (expectedNote.chordMidis?.includes(detectedNote.midi) ?? detectedNote.midi === expectedNote.midi))
 
   // ── Waveform ────────────────────────────────────────────────
   const canvasRef  = useRef<HTMLCanvasElement>(null)
   const frameRef   = useRef<number>(0)
   const wvDataRef  = useRef(new Float32Array(WV_BUF))
   const colorRef   = useRef('#444')
-  colorRef.current = matches ? '#22c55e' : detectedNote ? '#e5e5e5' : '#444'
+  useEffect(() => {
+    colorRef.current = matches ? '#22c55e' : detectedNote ? '#e5e5e5' : '#444'
+  }, [matches, detectedNote])
 
   useEffect(() => {
     if (!isListening) { cancelAnimationFrame(frameRef.current); return }
@@ -90,7 +93,8 @@ export function FloatingBar({
       for (let i = 0; i < WV_W; i++) {
         const s = wvDataRef.current[Math.floor(i * step)] ?? 0
         const y = ((s + 1) / 2) * WV_H
-        i === 0 ? ctx.moveTo(i, y) : ctx.lineTo(i, y)
+        if (i === 0) ctx.moveTo(i, y)
+        else ctx.lineTo(i, y)
       }
       ctx.stroke()
     }
@@ -99,11 +103,12 @@ export function FloatingBar({
   }, [isListening, analyserRef])
 
   // Panel stays visible for fretboard/keyboard even when controls are hidden
-  const showPanel = panelOpen && (!barHidden || panelView === 'fretboard' || panelView === 'keyboard')
+  const showPanel = panelOpen && (!barHidden || panelView === 'fretboard' || panelView === 'keyboard' || panelView === 'camera')
 
   return (
     // ── Dock — full-width shelf anchored to the bottom ──────────────────
     <div
+      className="floating-dock"
       style={{
         position: 'fixed', bottom: 0, left: 0, right: 0,
         zIndex: 100, userSelect: 'none',
@@ -120,7 +125,7 @@ export function FloatingBar({
 
       {/* ── Panel card — sits inside the dock ── */}
       {showPanel && (
-        <div style={{
+        <div className="floating-panel" style={{
           width: 'min(900px, calc(100vw - 32px))',
           marginLeft: 'auto', marginRight: 'auto',
           background: 'rgba(20,20,20,0.7)',
@@ -129,14 +134,14 @@ export function FloatingBar({
         }}>
           {/* Panel header with tabs + minimize button */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '5px 8px', borderBottom: '1px solid #1e1e1e' }}>
-            {(['fretboard', 'metronome', 'keyboard'] as PanelView[]).map(v => (
+            {(['fretboard', 'metronome', 'keyboard', 'camera'] as PanelView[]).map(v => (
               <button key={v} onClick={() => onChangePanelView(v)} style={{
                 height: 26, padding: '0 10px', borderRadius: 6, border: 'none',
                 background: panelView === v ? '#22c55e22' : 'transparent',
                 color: panelView === v ? '#22c55e' : '#555',
                 fontSize: 11, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s',
               }}>
-                {v === 'fretboard' ? '🎸 Mástil' : v === 'metronome' ? '🥁 Metrónomo' : '🎹 Teclado'}
+                {v === 'fretboard' ? '🎸 Mástil' : v === 'metronome' ? '🥁 Metrónomo' : v === 'keyboard' ? '🎹 Teclado' : '📷 Coach'}
               </button>
             ))}
             <div style={{ flex: 1 }} />
@@ -164,6 +169,7 @@ export function FloatingBar({
               />
             )}
             {panelView === 'keyboard' && <KeyboardPanel />}
+            {panelView === 'camera' && <CameraCoach />}
           </div>
         </div>
       )}
@@ -189,7 +195,7 @@ export function FloatingBar({
             opacity: 1,
           }}
         >
-          {panelView === 'fretboard' ? <FretboardIcon /> : panelView === 'metronome' ? <MetronomeIcon /> : <KeyboardIcon />}
+          {panelView === 'fretboard' ? <FretboardIcon /> : panelView === 'metronome' ? <MetronomeIcon /> : panelView === 'keyboard' ? <KeyboardIcon /> : <CameraIcon />}
         </button>
 
         {/* Ghost strip — replaces pill when bar is hidden */}
@@ -424,7 +430,6 @@ function GhostStrip({ onRestore, expectedNote, detectedNote, isMetronome, curren
   return (
     <div
       onClick={onRestore}
-      onMouseEnter={onRestore}
       style={{
         display: 'flex', alignItems: 'center', gap: 6,
         padding: '5px 14px',
@@ -669,6 +674,15 @@ function KeyboardIcon() {
       <rect x="1" y="1" width="20" height="12" rx="1.5"/>
       {[5, 9, 13, 17].map(x => <line key={x} x1={x} y1="1" x2={x} y2="13"/>)}
       {[4, 7, 11, 15, 18].map(x => <rect key={x} x={x - 1} y="1" width="2.5" height="7" fill="currentColor" rx="0.5"/>)}
+    </svg>
+  )
+}
+
+function CameraIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14.5 5 13 3h-2L9.5 5H6a3 3 0 0 0-3 3v8a3 3 0 0 0 3 3h12a3 3 0 0 0 3-3V8a3 3 0 0 0-3-3z"/>
+      <circle cx="12" cy="12" r="3.5"/>
     </svg>
   )
 }

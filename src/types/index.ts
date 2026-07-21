@@ -5,6 +5,9 @@ export interface DetectedNote {
   clarity: number    // 0-1 (>0.9 = clean note)
   timestamp: number  // performance.now() — updated every frame while ringing
   onset: number      // performance.now() when this note STARTED (silence/diff MIDI → this MIDI)
+  cents: number      // tuning offset from the detected MIDI note
+  rms: number        // signal energy used by the adaptive gate
+  stableFrames: number // consecutive analysis frames agreeing on the same note
 }
 
 export interface ExpectedNote {
@@ -16,6 +19,9 @@ export interface ExpectedNote {
   duration: number     // duration in ms
   stringNumber?: number
   fretNumber?: number
+  fingerNumber?: 0 | 1 | 2 | 3 | 4
+  handPosition?: number
+  chordMidis?: number[]
 }
 
 export type NoteResult = 'perfect' | 'good' | 'late' | 'early' | 'wrong' | 'miss'
@@ -48,4 +54,6 @@ export interface Score {
   streak: number
   maxStreak: number
   accuracy: number  // 0-100
+  points: number
+  multiplier: number
 }

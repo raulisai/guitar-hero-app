@@ -3,6 +3,7 @@ import { useAlphaTab } from '../hooks/useAlphaTab'
 import { NoteOverlay } from './NoteOverlay'
 import { HitFeedback } from './HitFeedback'
 import { useGameStore } from '../store/useGameStore'
+import { GameHUD } from './GameHUD'
 
 export interface ScoreViewerHandle {
   play: () => void
@@ -47,6 +48,7 @@ export const ScoreViewer = forwardRef<ScoreViewerHandle, ScoreViewerProps>(
           position: 'relative',
         }}
       >
+        <GameHUD />
         {/* Inner wrapper provides positioning context for the overlay */}
         <div style={{ position: 'relative', minWidth: '100%' }}>
           {/* AlphaTab render target */}

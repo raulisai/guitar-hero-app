@@ -2,10 +2,8 @@ import { useEffect, useRef, useCallback } from 'react'
 import * as alphaTab from '@coderline/alphatab'
 import { useGameStore } from '../store/useGameStore'
 import { midiToNoteName } from '../utils/noteUtils'
+import { getFingeringSuggestion } from '../utils/fingeringUtils'
 import type { ExpectedNote } from '../types'
-
-const MASTER_VOLUME_MUTED = 0
-const MASTER_VOLUME_NORMAL = 1
 
 // Standard guitar range: E2 (MIDI 40) to E6 (MIDI 88)
 const GUITAR_MIDI_MIN = 40
@@ -26,6 +24,7 @@ function buildSettings(scrollElement: HTMLElement | null): any {
   return {
     core: {
       fontDirectory: '/font/',
+      includeNoteBounds: true,
     },
     display: {
       layoutMode: 'page',
@@ -84,6 +83,7 @@ export function useAlphaTab(
     api.renderFinished.on(() => {
       setGameState('idle')
       lastMasterBeatKey.current = ''
+      lastFreeBeatKey.current = ''
       const bpm = api.score?.tempo ?? 0
       if (bpm > 0) useGameStore.getState().setSongBpm(bpm)
     })
@@ -98,6 +98,8 @@ export function useAlphaTab(
         prev.realValue < curr.realValue ? prev : curr
       )
       const midi    = clampToGuitarMidi(mainNote.realValue)
+      const chordMidis = [...new Set(beat.notes.map((note) => clampToGuitarMidi(note.realValue)))]
+      const fingering = getFingeringSuggestion(mainNote.fret, mainNote.leftHandFinger)
       const beatKey = `${beat.voice.bar.index}-${beat.index}`
 
       // ── FREE MODE (reproduction) ────────────────────────────────────────────
@@ -115,6 +117,9 @@ export function useAlphaTab(
           duration: lookupResult.duration,
           stringNumber: mainNote.string,
           fretNumber: mainNote.fret,
+          fingerNumber: fingering.finger,
+          handPosition: fingering.position,
+          chordMidis,
         } as ExpectedNote)
         updatePosition(beat.voice.bar.index, beat.index)
         return
@@ -133,17 +138,17 @@ export function useAlphaTab(
 
         // TAB note bounds: find all note heads on the TAB staff (bottom part of the screen)
         // and combine their bounds so the rectangle covers the entire chord accurately.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const allNoteBounds: any[] = beatBounds.notes ?? []
-        const withHeads = allNoteBounds.filter((nb: any) => nb.noteHeadBounds)
+        type NoteBoundsEntry = { noteHeadBounds?: { x: number; y: number; w: number; h: number } }
+        const allNoteBounds = (beatBounds.notes ?? []) as NoteBoundsEntry[]
+        const withHeads = allNoteBounds.filter((entry) => entry.noteHeadBounds)
         if (withHeads.length > 0) {
-          const maxY = Math.max(...withHeads.map((nb: any) => nb.noteHeadBounds.y))
-          const tabEntries = withHeads.filter((nb: any) => maxY - nb.noteHeadBounds.y < 100)
+          const maxY = Math.max(...withHeads.map((entry) => entry.noteHeadBounds!.y))
+          const tabEntries = withHeads.filter((entry) => maxY - entry.noteHeadBounds!.y < 100)
 
           let minX = Infinity, minY = Infinity
           let maxX = -Infinity, maxYTotal = -Infinity
-          tabEntries.forEach((entry: any) => {
-            const nb = entry.noteHeadBounds
+          tabEntries.forEach((entry) => {
+            const nb = entry.noteHeadBounds!
             if (nb.x < minX)          minX     = nb.x
             if (nb.y < minY)          minY     = nb.y
             if (nb.x + nb.w > maxX)   maxX     = nb.x + nb.w
@@ -168,6 +173,9 @@ export function useAlphaTab(
         duration: lookupResult.duration,
         stringNumber: mainNote.string,
         fretNumber: mainNote.fret,
+        fingerNumber: fingering.finger,
+        handPosition: fingering.position,
+        chordMidis,
       } as ExpectedNote)
       updatePosition(beat.voice.bar.index, beat.index)
 
@@ -199,6 +207,7 @@ export function useAlphaTab(
 
       try { api.stop() } catch { /* ignore if no score loaded yet */ }
       lastMasterBeatKey.current = ''
+      lastFreeBeatKey.current = ''
 
       if (file instanceof File) {
         const reader = new FileReader()
@@ -221,6 +230,7 @@ export function useAlphaTab(
   const pause = useCallback(() => apiRef.current?.pause(), [])
   const stop = useCallback(() => {
     lastMasterBeatKey.current = ''
+    lastFreeBeatKey.current = ''
     apiRef.current?.stop()
   }, [])
   const setTempo = useCallback((ratio: number) => {

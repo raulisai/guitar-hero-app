@@ -76,6 +76,26 @@ const initialScore: Score = {
   streak: 0,
   maxStreak: 0,
   accuracy: 0,
+  points: 0,
+  multiplier: 1,
+}
+
+const RESULT_WEIGHT: Record<NoteResult, number> = {
+  perfect: 1,
+  good: 0.8,
+  late: 0.55,
+  early: 0.55,
+  wrong: 0,
+  miss: 0,
+}
+
+const RESULT_POINTS: Record<NoteResult, number> = {
+  perfect: 1000,
+  good: 750,
+  late: 500,
+  early: 500,
+  wrong: 0,
+  miss: 0,
 }
 
 export const useGameStore = create<GameStore>()(
@@ -145,12 +165,18 @@ export const useGameStore = create<GameStore>()(
         let result: NoteResult
         let timeDiff = 0
 
-        if (!detectedNote || detectedNote.clarity < 0.85) {
+        if (!detectedNote || detectedNote.clarity < 0.82 || detectedNote.stableFrames < 2) {
           result = 'miss'
         } else if (gameMode === 'master') {
-          // Master mode: staleness is filtered upstream in useGameLoop subscribe.
-          // Here we only check MIDI match — no onset/timing check.
-          result = detectedNote.midi === expectedNote.midi ? 'perfect' : 'wrong'
+          const adjustedOnset = detectedNote.onset - latencyOffset
+          timeDiff = Math.max(0, adjustedOnset - expectedNote.timestamp)
+          const matches = expectedNote.chordMidis?.includes(detectedNote.midi)
+            ?? detectedNote.midi === expectedNote.midi
+
+          if (!matches) result = 'wrong'
+          else if (timeDiff <= 350) result = 'perfect'
+          else if (timeDiff <= 700) result = 'good'
+          else result = 'late'
         } else if (detectedNote.onset < expectedNote.timestamp - 300) {
           // Reproduction mode: note onset predates this beat — string was ringing before beat fired
           result = 'miss'
@@ -159,7 +185,8 @@ export const useGameStore = create<GameStore>()(
           const adjustedDetectedTime = detectedNote.timestamp - latencyOffset
           timeDiff = adjustedDetectedTime - expectedNote.timestamp
 
-          const noteMatch = detectedNote.midi === expectedNote.midi
+          const noteMatch = expectedNote.chordMidis?.includes(detectedNote.midi)
+            ?? detectedNote.midi === expectedNote.midi
 
           if (!noteMatch) {
             result = 'wrong'
@@ -184,22 +211,29 @@ export const useGameStore = create<GameStore>()(
         const isHit = ['perfect', 'good', 'late', 'early'].includes(result)
         const newStreak = isHit ? score.streak + 1 : 0
         const newMaxStreak = Math.max(score.maxStreak, newStreak)
+        const multiplier = Math.min(4, 1 + Math.floor(newStreak / 10))
 
         const newScore: Score = {
           ...score,
           [result]: (score[result as keyof Score] as number) + 1,
           streak: newStreak,
           maxStreak: newMaxStreak,
+          multiplier,
+          points: score.points + RESULT_POINTS[result] * (isHit ? multiplier : 1),
         }
 
         const total =
           newScore.perfect + newScore.good + newScore.late +
           newScore.early + newScore.wrong + newScore.miss
-        const hits = newScore.perfect + newScore.good + newScore.late + newScore.early
-        newScore.accuracy = total > 0 ? Math.round((hits / total) * 100) : 0
+        const weightedHits =
+          newScore.perfect * RESULT_WEIGHT.perfect +
+          newScore.good * RESULT_WEIGHT.good +
+          newScore.late * RESULT_WEIGHT.late +
+          newScore.early * RESULT_WEIGHT.early
+        newScore.accuracy = total > 0 ? Math.round((weightedHits / total) * 100) : 0
 
         set((state) => ({
-          attempts: [...state.attempts, attempt],
+          attempts: [...state.attempts.slice(-499), attempt],
           score: newScore,
         }))
       },

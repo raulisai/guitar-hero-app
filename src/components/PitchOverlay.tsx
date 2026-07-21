@@ -20,7 +20,9 @@ export function PitchOverlay() {
     Math.abs(detectedNote.midi - expectedNote.midi) <= 1
 
   // Keep color ref in sync with detection state
-  waveColorRef.current = matches ? '#22c55e' : detectedNote ? '#e5e5e5' : '#444'
+  useEffect(() => {
+    waveColorRef.current = matches ? '#22c55e' : detectedNote ? '#e5e5e5' : '#444'
+  }, [matches, detectedNote])
 
   // Waveform draw loop — starts/stops with listening state
   useEffect(() => {

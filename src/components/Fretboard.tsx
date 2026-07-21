@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useGameStore } from '../store/useGameStore'
+import { FINGER_NAMES } from '../utils/fingeringUtils'
 
 const NUM_STRINGS = 6
 // Let's show up to fret 17 to fit nicely in the viewport and cover most tab
@@ -39,6 +40,18 @@ export function Fretboard({ compact }: { compact?: boolean }) {
     >
       {/* Visual Options Toggle */}
       <div style={{ alignSelf: 'flex-end', display: 'flex', gap: '8px', zIndex: 30 }}>
+        {showIndicator && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 7, padding: compact ? '3px 8px' : '6px 10px',
+            borderRadius: 6, background: '#22c55e12', border: '1px solid #22c55e35',
+            fontSize: compact ? 10 : 12, color: '#9ca3af',
+          }}>
+            <strong style={{ color: '#22c55e' }}>
+              {expectedNote.fretNumber === 0 ? 'Al aire' : `${expectedNote.fingerNumber ?? 1} · ${FINGER_NAMES[expectedNote.fingerNumber ?? 1]}`}
+            </strong>
+            <span>traste {expectedNote.fretNumber} · cuerda {expectedNote.stringNumber}</span>
+          </div>
+        )}
         <button
           onClick={() => setShowHands(!showHands)}
           style={{
@@ -62,7 +75,7 @@ export function Fretboard({ compact }: { compact?: boolean }) {
           width: '100%',
           position: 'relative',
           // String height container
-          height: '180px', 
+          height: compact ? 'clamp(86px, 22vh, 180px)' : '180px',
         }}
       >
         {/* Fretboard Background & Cropped Elements Container */}
@@ -180,6 +193,7 @@ export function Fretboard({ compact }: { compact?: boolean }) {
              <Indicator 
                stringNum={expectedNote.stringNumber!} 
                fretNum={expectedNote.fretNumber!} 
+               fingerNum={expectedNote.fingerNumber ?? 1}
                showHands={showHands}
              />
           )}
@@ -189,7 +203,7 @@ export function Fretboard({ compact }: { compact?: boolean }) {
   )
 }
 
-function Indicator({ stringNum, fretNum, showHands }: { stringNum: number, fretNum: number, showHands: boolean }) {
+function Indicator({ stringNum, fretNum, fingerNum, showHands }: { stringNum: number, fretNum: number, fingerNum: number, showHands: boolean }) {
   const fretX = fretNum === 0
     ? 0
     : Math.min(Math.max((fretNum + 0.5) * (100 / NUM_FRET_BLOCKS), 0), 100)
@@ -199,6 +213,18 @@ function Indicator({ stringNum, fretNum, showHands }: { stringNum: number, fretN
 
   // Spring-like easing: slight overshoot → natural hand movement feel
   const spring = '0.22s cubic-bezier(0.34, 1.56, 0.64, 1)'
+  const fingerGeometry: Record<number, { x: number; tipY: number }> = {
+    1: { x: 12, tipY: 103 },
+    2: { x: 31, tipY: 89 },
+    3: { x: 48, tipY: 82 },
+    4: { x: 63, tipY: 69 },
+  }
+  const selectedFinger = fingerGeometry[fingerNum] ?? fingerGeometry[1]
+  const fingerStyle = (finger: number) => ({
+    fill: finger === fingerNum ? 'rgba(34,197,94,0.16)' : 'rgba(255,255,255,0.07)',
+    stroke: finger === fingerNum ? 'rgba(34,197,94,0.95)' : 'rgba(255,255,255,0.36)',
+    strokeWidth: finger === fingerNum ? 2.2 : 1.4,
+  })
 
   return (
     <>
@@ -222,8 +248,8 @@ function Indicator({ stringNum, fretNum, showHands }: { stringNum: number, fretN
             height="110"
             style={{
               position: 'absolute',
-              left: '-12px',   // index-finger center (x≈12) aligns with anchor
-              top: '-102px',   // index-finger tip contact (y≈102) aligns with anchor
+              left: `${-selectedFinger.x}px`,
+              top: `${-selectedFinger.tipY}px`,
               pointerEvents: 'none',
               filter: 'drop-shadow(0 0 8px rgba(34,197,94,0.45))',
             }}
@@ -252,9 +278,7 @@ function Indicator({ stringNum, fretNum, showHands }: { stringNum: number, fretN
 
             {/* ── INDEX — pressing finger (tallest, brightest, green tip) ── */}
             <rect x="3" y="28" width="18" height="72" rx="9"
-              fill="rgba(34,197,94,0.10)"
-              stroke="rgba(255,255,255,0.60)"
-              strokeWidth="2"
+              {...fingerStyle(1)}
             />
             {/* Fingernail */}
             <ellipse cx="12" cy="36" rx="6" ry="4"
@@ -268,9 +292,7 @@ function Indicator({ stringNum, fretNum, showHands }: { stringNum: number, fretN
 
             {/* ── MIDDLE ── */}
             <rect x="24" y="28" width="15" height="60" rx="7.5"
-              fill="rgba(255,255,255,0.07)"
-              stroke="rgba(255,255,255,0.38)"
-              strokeWidth="1.4"
+              {...fingerStyle(2)}
             />
             <ellipse cx="31" cy="35" rx="5" ry="3.5"
               fill="rgba(255,255,255,0.11)" stroke="rgba(255,255,255,0.24)" strokeWidth="0.9" />
@@ -279,9 +301,7 @@ function Indicator({ stringNum, fretNum, showHands }: { stringNum: number, fretN
 
             {/* ── RING ── */}
             <rect x="41" y="28" width="14" height="53" rx="7"
-              fill="rgba(255,255,255,0.07)"
-              stroke="rgba(255,255,255,0.36)"
-              strokeWidth="1.4"
+              {...fingerStyle(3)}
             />
             <ellipse cx="48" cy="35" rx="4.5" ry="3"
               fill="rgba(255,255,255,0.11)" stroke="rgba(255,255,255,0.22)" strokeWidth="0.9" />
@@ -290,16 +310,14 @@ function Indicator({ stringNum, fretNum, showHands }: { stringNum: number, fretN
 
             {/* ── PINKY (shortest) ── */}
             <rect x="57" y="28" width="12" height="40" rx="6"
-              fill="rgba(255,255,255,0.07)"
-              stroke="rgba(255,255,255,0.32)"
-              strokeWidth="1.3"
+              {...fingerStyle(4)}
             />
             <ellipse cx="63" cy="35" rx="4" ry="2.8"
               fill="rgba(255,255,255,0.11)" stroke="rgba(255,255,255,0.20)" strokeWidth="0.8" />
             <path d="M 58,49 Q 63,47 68,49" stroke="rgba(255,255,255,0.20)" strokeWidth="1" fill="none" />
 
             {/* ── Contact ellipse — index fingertip on the string ── */}
-            <ellipse cx="12" cy="103" rx="9" ry="5.5"
+            <ellipse cx={selectedFinger.x} cy={selectedFinger.tipY} rx="9" ry="5.5"
               fill="rgba(34,197,94,0.30)"
               stroke="rgba(34,197,94,0.75)"
               strokeWidth="1.5"
@@ -327,13 +345,9 @@ function Indicator({ stringNum, fretNum, showHands }: { stringNum: number, fretN
           justifyContent: 'center',
         }}
       >
-        <div style={{
-          width: '45%',
-          height: '45%',
-          borderRadius: '50%',
-          background: '#fff',
-          boxShadow: '0 0 8px #fff',
-        }} />
+        <span style={{ color: '#061008', fontSize: 11, fontWeight: 900, lineHeight: 1 }}>
+          {fretNum === 0 ? '○' : fingerNum}
+        </span>
       </div>
     </>
   )

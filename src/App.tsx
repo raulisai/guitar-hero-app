@@ -5,6 +5,7 @@ import { FloatingBar } from './components/FloatingBar'
 import type { PanelView } from './components/FloatingBar'
 import { OrientationGuard } from './components/OrientationGuard'
 import { DebugLog } from './components/DebugLog'
+import { AdminDashboard, type RepositoryFile } from './components/AdminDashboard'
 import { useGameLoop } from './hooks/useGameLoop'
 import { useGameStore } from './store/useGameStore'
 import { useMetronome } from './hooks/useMetronome'
@@ -29,6 +30,8 @@ export default function App() {
   const [tempo, setTempoState] = useState(100)
   const [isLooping, setIsLooping] = useState(false)
   const [isMetronome, setIsMetronome] = useState(false)
+  const [activeSection, setActiveSection] = useState<'game' | 'admin'>('game')
+  const [syncedSongs, setSyncedSongs] = useState<DemoSong[]>([])
   const scoreRef = useRef<ScoreViewerHandle>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { isCalibrated, gameMode, gameState, setGameMode, resetGame, fadeFailed, songBpm, micEnabled, setMicEnabled } = useGameStore()
@@ -39,6 +42,19 @@ export default function App() {
 
   useGameLoop()
   useMetronome(isMetronome, songBpm, tempo)
+
+  useEffect(() => {
+    fetch('/repertoire/catalog.json')
+      .then((response) => response.ok ? response.json() : null)
+      .then((catalog: { songs?: Array<{ title: string; artist: string; file: string }> } | null) => {
+        if (catalog?.songs) {
+          setSyncedSongs(catalog.songs.map((song) => ({ title: song.title, artist: song.artist, tex: song.file })))
+        }
+      })
+      .catch(() => { /* the built-in repertoire remains available offline */ })
+  }, [])
+
+  const availableSongs = [...ALL_SONGS, ...syncedSongs]
 
   // Auto-start mic if user had it on in last session
   useEffect(() => {
@@ -97,12 +113,23 @@ export default function App() {
     resetGame()
   }, [resetGame])
 
+  const handleRepositorySong = useCallback(async (entry: RepositoryFile) => {
+    const response = await fetch(entry.downloadUrl)
+    if (!response.ok) throw new Error(`descarga HTTP ${response.status}`)
+    const buffer = await response.arrayBuffer()
+    const file = new File([buffer], entry.name, { type: 'application/octet-stream' })
+    setSongFile(file)
+    setSongTitle(entry.name.replace(/\.[^.]+$/, ''))
+    setActiveSection('game')
+    resetGame()
+  }, [resetGame])
+
   return (
     <div className="flex flex-col" style={{ height: '100svh', background: '#111' }}>
-      <OrientationGuard />
+      {activeSection === 'game' && <OrientationGuard />}
       {/* ── Header ─────────────────────────────────────── */}
       <header
-        className="flex items-center justify-between px-5 shrink-0"
+        className="app-header flex items-center justify-between px-5 shrink-0"
         style={{ height: '44px', background: '#111', borderBottom: '1px solid #1e1e1e' }}
       >
         {/* Left: Logo */}
@@ -113,10 +140,10 @@ export default function App() {
         </div>
 
         {/* Center: Song search bar */}
-        <div className="flex-1 flex justify-center px-6" style={{ maxWidth: 480 }}>
+        <div className="app-song-picker flex-1 flex justify-center px-6" style={{ maxWidth: 480 }}>
           <div className="relative w-full">
             <button
-              onClick={() => setShowDemoMenu((v) => !v)}
+              onClick={() => { setActiveSection('game'); setShowDemoMenu((v) => !v) }}
               style={{
                 width: '100%',
                 height: 30,
@@ -138,7 +165,7 @@ export default function App() {
                 <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
               </svg>
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
-                {songTitle}
+                {activeSection === 'admin' ? 'Panel admin · repertorio' : songTitle}
               </span>
               <span style={{ color: '#444', fontSize: 10, flexShrink: 0 }}>▾</span>
             </button>
@@ -157,12 +184,12 @@ export default function App() {
                 }}
               >
                 {/* Group by artist */}
-                {[...new Set(ALL_SONGS.map(s => s.artist))].map((artist) => (
+                {[...new Set(availableSongs.map(s => s.artist))].map((artist) => (
                   <div key={artist}>
                     <div style={{ padding: '6px 14px 2px', fontSize: 9, color: '#444', letterSpacing: '0.08em', fontWeight: 700, textTransform: 'uppercase', borderTop: '1px solid #222' }}>
                       {artist}
                     </div>
-                    {ALL_SONGS.filter(s => s.artist === artist).map((song) => (
+                    {availableSongs.filter(s => s.artist === artist).map((song) => (
                       <button
                         key={song.title}
                         onClick={() => loadDemo(song)}
@@ -188,7 +215,14 @@ export default function App() {
         </div>
 
         {/* Right: action buttons */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="app-header-actions flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => { setActiveSection((section) => section === 'admin' ? 'game' : 'admin'); setShowDemoMenu(false) }}
+            className="admin-nav-button text-xs px-3 py-1.5 rounded transition-colors"
+            style={{ background: activeSection === 'admin' ? '#22c55e' : '#22c55e15', color: activeSection === 'admin' ? '#061008' : '#22c55e', border: '1px solid #22c55e44', fontWeight: 700 }}
+          >
+            {activeSection === 'admin' ? 'Volver al juego' : 'Admin'}
+          </button>
           {/* Demos button */}
           <button
             onClick={() => setShowDemoMenu((v) => !v)}
@@ -251,18 +285,16 @@ export default function App() {
         </div>
       </header>
 
+      {activeSection === 'admin' ? (
+        <AdminDashboard onLoadSong={handleRepositorySong} />
+      ) : (
+      <>
       {/* ── Score area ─────────────────────────────────── */}
       <div
-        className="relative"
+        className={`score-stage relative ${panelOpen ? 'panel-open' : 'panel-closed'} ${barHidden ? 'dock-hidden' : 'dock-visible'} panel-${panelView}`}
         style={{
           flex: 1, overflow: 'hidden',
           display: 'flex', flexDirection: 'column',
-          // Dock sits at bottom:0. Single row (bubble+ghost) when hidden.
-          paddingBottom:
-            barHidden && panelOpen && panelView !== 'metronome' ? '270px' :
-            !barHidden && panelOpen ? '315px' :
-            barHidden ? '42px' :
-            '85px',
           transition: 'padding-bottom 0.45s cubic-bezier(0.4,0,0.2,1)',
         }}
         onClick={() => {
@@ -319,6 +351,8 @@ export default function App() {
         barHidden={barHidden}
         onShowBar={showBar}
       />
+      </>
+      )}
     </div>
   )
 }
