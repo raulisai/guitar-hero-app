@@ -4,6 +4,7 @@ import { NoteOverlay } from './NoteOverlay'
 import { HitFeedback } from './HitFeedback'
 import { useGameStore } from '../store/useGameStore'
 import { GameHUD } from './GameHUD'
+import { NoteValidator } from './NoteValidator'
 
 export interface ScoreViewerHandle {
   play: () => void
@@ -15,10 +16,14 @@ export interface ScoreViewerHandle {
 interface ScoreViewerProps {
   file: File | string | null
   onScroll?: () => void
+  isListening: boolean
+  isRequesting: boolean
+  micError: string | null
+  onToggleMic: () => void
 }
 
 export const ScoreViewer = forwardRef<ScoreViewerHandle, ScoreViewerProps>(
-  ({ file, onScroll }, ref) => {
+  ({ file, onScroll, isListening, isRequesting, micError, onToggleMic }, ref) => {
     // scrollRef = outer container with overflow-x: auto (AlphaTab scrolls this)
     const scrollRef = useRef<HTMLDivElement>(null)
     // containerRef = AlphaTab render target
@@ -37,51 +42,37 @@ export const ScoreViewer = forwardRef<ScoreViewerHandle, ScoreViewerProps>(
 
     return (
       <div
-        ref={scrollRef}
-        onScroll={onScroll}
-        style={{
-          flex: 1,
-          minHeight: 0,        /* critical: lets flex shrink below content height */
-          overflowX: 'hidden',
-          overflowY: 'auto',
-          background: '#111',
-          position: 'relative',
-        }}
+        className="score-viewer"
       >
-        <GameHUD />
-        {/* Inner wrapper provides positioning context for the overlay */}
-        <div style={{ position: 'relative', minWidth: '100%' }}>
-          {/* AlphaTab render target */}
-          <div ref={containerRef} style={{ minHeight: '200px' }} />
+        <NoteValidator
+          isListening={isListening}
+          isRequesting={isRequesting}
+          error={micError}
+          onToggleMic={onToggleMic}
+        />
 
-          {/* Overlays and hit feedback — master mode only */}
-          {isMaster && <NoteOverlay />}
-          {isMaster && <HitFeedback />}
-        </div>
+        <div ref={scrollRef} onScroll={onScroll} className="score-scroll">
+          <GameHUD />
+          {/* Inner wrapper provides positioning context for the overlay */}
+          <div className="score-canvas">
+            {/* AlphaTab render target */}
+            <div ref={containerRef} className="alphatab-target" />
 
-        {/* Placeholder when no file */}
-        {!file && (
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 12,
-              pointerEvents: 'none',
-              color: '#444',
-            }}
-          >
-            <svg viewBox="0 0 24 24" fill="currentColor" style={{ width: 64, height: 64, opacity: 0.3 }}>
-              <path d="M9 3v10.55A4 4 0 1 0 11 17V7h4V3H9z" />
-            </svg>
-            <p style={{ color: '#555', fontSize: 18, margin: 0 }}>
-              Carga un archivo .gp5 para comenzar
-            </p>
+            {/* Overlays and hit feedback — master mode only */}
+            {isMaster && <NoteOverlay />}
+            {isMaster && <HitFeedback />}
           </div>
-        )}
+
+          {/* Placeholder when no file */}
+          {!file && (
+            <div className="score-empty">
+              <svg viewBox="0 0 24 24" fill="currentColor">
+                <path d="M9 3v10.55A4 4 0 1 0 11 17V7h4V3H9z" />
+              </svg>
+              <p>Carga un archivo .gp5 para comenzar</p>
+            </div>
+          )}
+          </div>
       </div>
     )
   }

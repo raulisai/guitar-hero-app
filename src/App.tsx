@@ -3,7 +3,6 @@ import { ScoreViewer, type ScoreViewerHandle } from './components/ScoreViewer'
 import { Calibration } from './components/Calibration'
 import { FloatingBar } from './components/FloatingBar'
 import type { PanelView } from './components/FloatingBar'
-import { OrientationGuard } from './components/OrientationGuard'
 import { DebugLog } from './components/DebugLog'
 import { AdminDashboard, type RepositoryFile } from './components/AdminDashboard'
 import { useGameLoop } from './hooks/useGameLoop'
@@ -25,7 +24,9 @@ export default function App() {
   const [calibrationTab, setCalibrationTab] = useState<CalibrationTab>('tuner')
   const [showDemoMenu, setShowDemoMenu] = useState(false)
   const [showDebugLog, setShowDebugLog] = useState(false)
-  const [panelOpen, setPanelOpen] = useState(true)
+  const [panelOpen, setPanelOpen] = useState(() =>
+    typeof window === 'undefined' || (window.innerWidth > 900 && window.innerHeight > 520)
+  )
   const [panelView, setPanelView] = useState<PanelView>('fretboard')
   const [tempo, setTempoState] = useState(100)
   const [isLooping, setIsLooping] = useState(false)
@@ -38,7 +39,7 @@ export default function App() {
   const { barHidden, showBar, hideNow } = useAutoHide(gameMode)
 
   // Audio detection — lifted to App so mic button in FloatingBar and MicPill share one instance
-  const { isListening, isRequesting, error: micError, startListening, stopListening, analyserRef } = useAudioDetection()
+  const { isListening, isRequesting, error: micError, startListening, stopListening } = useAudioDetection()
 
   useGameLoop()
   useMetronome(isMetronome, songBpm, tempo)
@@ -126,7 +127,6 @@ export default function App() {
 
   return (
     <div className="flex flex-col" style={{ height: '100svh', background: '#111' }}>
-      {activeSection === 'game' && <OrientationGuard />}
       {/* ── Header ─────────────────────────────────────── */}
       <header
         className="app-header flex items-center justify-between px-5 shrink-0"
@@ -302,7 +302,15 @@ export default function App() {
           if (showCalibration) setShowCalibration(false)
         }}
       >
-        <ScoreViewer ref={scoreRef} file={songFile} onScroll={hideNow} />
+        <ScoreViewer
+          ref={scoreRef}
+          file={songFile}
+          onScroll={hideNow}
+          isListening={isListening}
+          isRequesting={isRequesting}
+          micError={micError}
+          onToggleMic={handleToggleMic}
+        />
 
         {/* Debug log — bottom-right corner */}
         {showDebugLog && <DebugLog onClose={() => setShowDebugLog(false)} />}
@@ -342,8 +350,6 @@ export default function App() {
         isListening={isListening}
         isRequesting={isRequesting}
         onToggleMic={handleToggleMic}
-        analyserRef={analyserRef}
-        micError={micError}
         panelOpen={panelOpen}
         panelView={panelView}
         onTogglePanel={() => setPanelOpen(v => !v)}

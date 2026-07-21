@@ -1,12 +1,8 @@
-import React, { useEffect, useRef } from 'react'
+import React from 'react'
 import { useGameStore } from '../store/useGameStore'
 import type { GameMode } from '../types'
 import { Fretboard } from './Fretboard'
 import { CameraCoach } from './CameraCoach'
-
-const WV_W = 80   // waveform canvas width
-const WV_H = 18   // waveform canvas height
-const WV_BUF = 512
 
 export type PanelView = 'fretboard' | 'metronome' | 'keyboard' | 'camera'
 
@@ -30,8 +26,6 @@ interface FloatingBarProps {
   isListening: boolean
   isRequesting: boolean
   onToggleMic: () => void
-  analyserRef: React.RefObject<AnalyserNode | null>
-  micError: string | null
   // panel
   panelOpen: boolean
   panelView: PanelView
@@ -50,7 +44,6 @@ export function FloatingBar({
   isMetronome, onToggleMetronome,
   onModeChange, onReset,
   isListening, isRequesting, onToggleMic,
-  analyserRef, micError,
   panelOpen, panelView, onTogglePanel, onChangePanelView,
   barHidden, onShowBar,
 }: FloatingBarProps) {
@@ -64,43 +57,6 @@ export function FloatingBar({
   const isMaster  = gameMode === 'master'
 
   const matches = !!(detectedNote && expectedNote && (expectedNote.chordMidis?.includes(detectedNote.midi) ?? detectedNote.midi === expectedNote.midi))
-
-  // ── Waveform ────────────────────────────────────────────────
-  const canvasRef  = useRef<HTMLCanvasElement>(null)
-  const frameRef   = useRef<number>(0)
-  const wvDataRef  = useRef(new Float32Array(WV_BUF))
-  const colorRef   = useRef('#444')
-  useEffect(() => {
-    colorRef.current = matches ? '#22c55e' : detectedNote ? '#e5e5e5' : '#444'
-  }, [matches, detectedNote])
-
-  useEffect(() => {
-    if (!isListening) { cancelAnimationFrame(frameRef.current); return }
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-
-    const draw = () => {
-      frameRef.current = requestAnimationFrame(draw)
-      if (!analyserRef.current) return
-      analyserRef.current.getFloatTimeDomainData(wvDataRef.current)
-      ctx.clearRect(0, 0, WV_W, WV_H)
-      ctx.strokeStyle = colorRef.current
-      ctx.lineWidth = 1.3
-      ctx.beginPath()
-      const step = WV_BUF / WV_W
-      for (let i = 0; i < WV_W; i++) {
-        const s = wvDataRef.current[Math.floor(i * step)] ?? 0
-        const y = ((s + 1) / 2) * WV_H
-        if (i === 0) ctx.moveTo(i, y)
-        else ctx.lineTo(i, y)
-      }
-      ctx.stroke()
-    }
-    draw()
-    return () => cancelAnimationFrame(frameRef.current)
-  }, [isListening, analyserRef])
 
   // Panel stays visible for fretboard/keyboard even when controls are hidden
   const showPanel = panelOpen && (!barHidden || panelView === 'fretboard' || panelView === 'keyboard' || panelView === 'camera')
@@ -175,7 +131,7 @@ export function FloatingBar({
       )}
 
       {/* ── Bar row: bubble + ghost strip (hidden) OR pill (visible) ── */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%' }}>
+      <div className="floating-dock__row">
 
         {/* Bubble — always visible, shrinks when bar is hidden */}
         <button
@@ -211,7 +167,7 @@ export function FloatingBar({
         )}
 
         {/* Collapsible pill — visible when bar is shown */}
-        <div style={{
+        <div className="floating-pill-wrap" style={{
           maxHeight: barHidden ? 0 : 300,
           overflow: 'hidden',
           opacity: barHidden ? 0 : 1,
@@ -220,7 +176,7 @@ export function FloatingBar({
         }}>
 
         {/* The pill */}
-        <div style={{
+        <div className="floating-pill" style={{
           background: 'rgba(16,16,16,0.97)',
           backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)',
           borderRadius: 20,
@@ -233,50 +189,8 @@ export function FloatingBar({
           transition: 'border-color 0.25s, box-shadow 0.25s',
         }}>
 
-          {/* ── Mic info row (only when listening) ── */}
-          {isListening && (
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 10,
-              padding: '7px 16px',
-              borderBottom: '1px solid #1e1e1e',
-              whiteSpace: 'nowrap',
-            }}>
-              {micError ? (
-                <span style={{ fontSize: 10, color: '#ef4444' }}>{micError}</span>
-              ) : (
-                <>
-                  <NoteCell name={expectedNote?.name ?? '—'} label="espera" color="#3b82f6" />
-                  <span style={{
-                    fontSize: 14,
-                    color: matches ? '#22c55e' : '#2e2e2e',
-                    transition: 'color 0.15s',
-                    lineHeight: 1,
-                    fontWeight: 600,
-                  }}>
-                    {matches ? '✓' : '→'}
-                  </span>
-                  <NoteCell
-                    name={detectedNote?.name ?? '—'}
-                    label="tocando"
-                    color={matches ? '#22c55e' : detectedNote ? '#e5e5e5' : '#444'}
-                  />
-                  <div style={{ width: 1, height: 20, background: '#222', flexShrink: 0 }} />
-                  <canvas
-                    ref={canvasRef}
-                    width={WV_W}
-                    height={WV_H}
-                    style={{ display: 'block', borderRadius: 3, background: '#080808', flexShrink: 0 }}
-                  />
-                </>
-              )}
-            </div>
-          )}
-
           {/* ── Controls row ── */}
-          <div style={{
+          <div className="floating-controls" style={{
             display: 'flex',
             alignItems: 'center',
             gap: '4px',
@@ -684,16 +598,6 @@ function CameraIcon() {
       <path d="M14.5 5 13 3h-2L9.5 5H6a3 3 0 0 0-3 3v8a3 3 0 0 0 3 3h12a3 3 0 0 0 3-3V8a3 3 0 0 0-3-3z"/>
       <circle cx="12" cy="12" r="3.5"/>
     </svg>
-  )
-}
-
-// ── Sub-components & helpers ───────────────────────────────────────────
-function NoteCell({ name, label, color }: { name: string; label: string; color: string }) {
-  return (
-    <div style={{ textAlign: 'center', minWidth: 26 }}>
-      <div style={{ fontSize: 14, fontWeight: 700, color, lineHeight: 1 }}>{name}</div>
-      <div style={{ fontSize: 8, color: '#383838', marginTop: 2, letterSpacing: '0.04em' }}>{label}</div>
-    </div>
   )
 }
 

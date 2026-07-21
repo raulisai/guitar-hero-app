@@ -12,6 +12,14 @@ body {
   overflow: hidden;
 }
 
+button, input {
+  font: inherit;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
 @media (max-width: 900px) {
   .app-header { padding-left:10px !important; padding-right:10px !important; }
   .app-song-picker { padding-left:10px !important; padding-right:10px !important; }
@@ -34,6 +42,166 @@ body {
   flex-direction: column;
 }
 
+.score-viewer {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #111;
+}
+
+.score-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  background: #111;
+  position: relative;
+}
+
+.score-canvas {
+  position: relative;
+  min-width: 100%;
+}
+
+.alphatab-target {
+  min-height: 200px;
+}
+
+.score-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  pointer-events: none;
+  color: #444;
+}
+
+.score-empty svg { width:64px; height:64px; opacity:.3; }
+.score-empty p { margin:0; color:#555; font-size:18px; }
+
+/* The note validator sits outside the scrolling score so it never covers notation or TAB. */
+.note-validator {
+  --validator-accent: #3b82f6;
+  min-height: 68px;
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: 52px 84px minmax(180px, 1fr) 84px 112px;
+  align-items: center;
+  gap: 10px;
+  padding: 8px clamp(12px, 3vw, 28px);
+  border-bottom: 1px solid #272727;
+  background: linear-gradient(180deg, #171717, #121212);
+  box-shadow: 0 10px 28px rgba(0,0,0,.2);
+  color: #e5e5e5;
+  position: relative;
+  z-index: 35;
+}
+.note-validator::after {
+  content:"";
+  position:absolute;
+  left:0;
+  right:0;
+  bottom:-1px;
+  height:2px;
+  background:linear-gradient(90deg, transparent, var(--validator-accent), transparent);
+  opacity:.65;
+  transition:background .2s ease, opacity .2s ease;
+}
+.note-validator[data-state="match"] { --validator-accent:#22c55e; }
+.note-validator[data-state="wrong"], .note-validator[data-state="error"] { --validator-accent:#ef4444; }
+.note-validator[data-state="idle"]::after { opacity:.2; }
+.note-validator__mic {
+  width:44px;
+  height:44px;
+  display:grid;
+  place-items:center;
+  gap:1px;
+  padding:5px;
+  border:1px solid color-mix(in srgb, var(--validator-accent) 45%, #252525);
+  border-radius:12px;
+  color:var(--validator-accent);
+  background:color-mix(in srgb, var(--validator-accent) 10%, #141414);
+  cursor:pointer;
+}
+.note-validator__mic:disabled { opacity:.55; cursor:wait; }
+.note-validator__mic svg { width:16px; height:16px; fill:currentColor; }
+.note-validator__mic span { font-size:7px; font-weight:900; letter-spacing:.1em; }
+.note-validator__note {
+  min-width:0;
+  text-align:center;
+  padding:5px 8px;
+  border:1px solid #272727;
+  border-radius:10px;
+  background:#0d0d0d;
+}
+.note-validator__note span {
+  display:block;
+  overflow:hidden;
+  color:#555;
+  font-size:8px;
+  font-weight:750;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.note-validator__note strong { display:block; margin-top:1px; font-size:22px; line-height:1; }
+.note-validator__note[data-tone="expected"] strong { color:#60a5fa; }
+.note-validator__note[data-tone="heard"] strong { color:#d4d4d4; }
+.note-validator__note[data-tone="match"] strong { color:#22c55e; text-shadow:0 0 18px rgba(34,197,94,.35); }
+.note-validator__result {
+  min-width:0;
+  display:grid;
+  grid-template-columns:28px minmax(0,1fr);
+  align-items:center;
+  column-gap:8px;
+}
+.note-validator__signal {
+  grid-row:1 / 3;
+  display:grid;
+  place-items:center;
+  width:28px;
+  height:28px;
+  border-radius:50%;
+  color:var(--validator-accent);
+  background:color-mix(in srgb, var(--validator-accent) 12%, #151515);
+  font-size:17px;
+  font-weight:950;
+}
+.note-validator__result strong,
+.note-validator__result small {
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.note-validator__result strong { align-self:end; color:var(--validator-accent); font-size:12px; }
+.note-validator__result small { align-self:start; margin-top:2px; color:#686868; font-size:9px; }
+.note-validator__score {
+  display:flex;
+  min-width:0;
+  flex-direction:column;
+  align-items:flex-end;
+}
+.note-validator__score strong,
+.note-validator__score span { max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.note-validator__score strong { color:#777; font-size:10px; letter-spacing:.05em; }
+.note-validator__score span { margin-top:2px; color:#555; font-size:9px; }
+
+.floating-dock__row {
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  width:100%;
+}
+
 .score-stage.dock-hidden.panel-open:not(.panel-metronome) { padding-bottom:270px; }
 .score-stage.dock-visible.panel-open { padding-bottom:315px; }
 .score-stage.dock-hidden { padding-bottom:42px; }
@@ -46,6 +214,80 @@ body {
   .score-stage.dock-visible.panel-open.panel-camera { padding-bottom:235px; }
   .floating-dock { padding-top:6px !important; padding-bottom:5px !important; }
   .floating-panel { width:min(960px,calc(100vw - 16px)) !important; }
+}
+
+@media (max-height: 500px) and (max-width: 950px) {
+  .floating-panel { max-height:145px; overflow:auto !important; }
+  .game-hud { display:none; }
+}
+
+@media (max-width: 760px) {
+  .score-stage.dock-hidden.panel-open:not(.panel-metronome),
+  .score-stage.dock-hidden { padding-bottom:44px; }
+  .score-stage.dock-visible.panel-open { padding-bottom:min(255px, 39svh); }
+  .score-stage.dock-visible { padding-bottom:70px; }
+
+  .score-scroll { overflow-x:auto; }
+  .alphatab-target { min-height:160px; }
+  .score-empty svg { width:42px; height:42px; }
+  .score-empty p { font-size:13px; }
+
+  .note-validator {
+    min-height:62px;
+    grid-template-columns:38px 62px minmax(92px, 1fr) 62px;
+    gap:6px;
+    padding:6px 8px;
+  }
+  .note-validator__mic { width:36px; height:42px; border-radius:10px; }
+  .note-validator__mic svg { width:14px; height:14px; }
+  .note-validator__note { padding:5px 4px; border-radius:8px; }
+  .note-validator__note span { font-size:6px; letter-spacing:.02em; }
+  .note-validator__note strong { font-size:18px; }
+  .note-validator__result { grid-template-columns:20px minmax(0,1fr); column-gap:5px; }
+  .note-validator__signal { width:20px; height:20px; font-size:13px; }
+  .note-validator__result strong { font-size:10px; }
+  .note-validator__result small { font-size:7px; }
+  .note-validator__score { display:none; }
+
+  .game-hud { display:none; }
+
+  .floating-dock {
+    padding:6px max(6px, env(safe-area-inset-right)) max(6px, env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left)) !important;
+    gap:5px !important;
+  }
+  .floating-panel {
+    width:calc(100vw - 12px) !important;
+    max-height:min(210px, 34svh);
+    overflow:auto !important;
+  }
+  .floating-panel > div:first-child {
+    position:sticky;
+    top:0;
+    z-index:2;
+    background:#151515;
+    overflow-x:auto;
+  }
+  .floating-panel > div:first-child button { flex-shrink:0; padding-left:8px !important; padding-right:8px !important; }
+  .floating-dock__row { gap:5px; }
+  .floating-dock__row > button { width:36px !important; height:36px !important; }
+  .floating-pill-wrap { width:calc(100vw - 53px); min-width:0; }
+  .floating-pill { width:100%; border-radius:16px !important; }
+  .floating-controls {
+    width:100%;
+    height:48px !important;
+    padding:0 8px !important;
+    overflow-x:auto;
+    overscroll-behavior-x:contain;
+    scrollbar-width:none;
+  }
+  .floating-controls::-webkit-scrollbar { display:none; }
+}
+
+@media (max-width: 430px) {
+  .app-header { height:42px !important; }
+  .app-song-picker { padding-left:0 !important; padding-right:6px !important; min-width:0; }
+  .app-header-actions .admin-nav-button { display:none; }
+  .app-header-actions > button:last-of-type { max-width:70px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 }
 
 /* ── Hit feedback animations ──────────────────────────────── */
