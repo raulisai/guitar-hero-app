@@ -16,7 +16,7 @@ interface DebugLogProps {
 }
 
 export function DebugLog({ onClose }: DebugLogProps) {
-  const { attempts } = useGameStore()
+  const attempts = useGameStore((state) => state.attempts)
   const listRef = useRef<HTMLDivElement>(null)
 
   // Auto-scroll to bottom when new attempts arrive

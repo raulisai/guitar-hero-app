@@ -1,4 +1,5 @@
 import React from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { useGameStore } from '../store/useGameStore'
 import type { GameMode } from '../types'
 import { Fretboard } from './Fretboard'
@@ -51,7 +52,20 @@ export function FloatingBar({
     gameState, gameMode, score, currentBar, currentBeat,
     waitMode, setWaitMode, isMuted, setIsMuted,
     detectedNote, expectedNote, songBpm,
-  } = useGameStore()
+  } = useGameStore(useShallow((state) => ({
+    gameState: state.gameState,
+    gameMode: state.gameMode,
+    score: state.score,
+    currentBar: state.currentBar,
+    currentBeat: state.currentBeat,
+    waitMode: state.waitMode,
+    setWaitMode: state.setWaitMode,
+    isMuted: state.isMuted,
+    setIsMuted: state.setIsMuted,
+    detectedNote: state.detectedNote,
+    expectedNote: state.expectedNote,
+    songBpm: state.songBpm,
+  })))
 
   const isPlaying = gameState === 'playing'
   const isMaster  = gameMode === 'master'
@@ -232,6 +246,29 @@ export function FloatingBar({
               <MicIcon />
             </button>
 
+            {/* Mode switch — kept near transport so it stays visible on phones */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+              <span style={{ fontSize: 11, fontWeight: gameMode === 'reproduction' ? 600 : 400, color: gameMode === 'reproduction' ? '#fff' : '#444', transition: 'color 0.2s' }}>Libre</span>
+              <button
+                onClick={() => onModeChange(gameMode === 'reproduction' ? 'master' : 'reproduction')}
+                title="Cambiar modo"
+                style={{
+                  position: 'relative', width: 44, height: 24, borderRadius: 12, padding: 0, flexShrink: 0,
+                  background: gameMode === 'master' ? '#22c55e' : '#333', border: 'none',
+                  cursor: 'pointer', transition: 'background 0.25s',
+                }}
+              >
+                <div style={{
+                  position: 'absolute', top: 3,
+                  left: gameMode === 'master' ? 23 : 3,
+                  width: 18, height: 18, borderRadius: '50%', background: '#fff',
+                  transition: 'left 0.25s cubic-bezier(0.34,1.56,0.64,1)',
+                  boxShadow: '0 1px 4px rgba(0,0,0,0.4)',
+                }} />
+              </button>
+              <span style={{ fontSize: 11, fontWeight: gameMode === 'master' ? 600 : 400, color: gameMode === 'master' ? '#fff' : '#444', transition: 'color 0.2s' }}>Enseñanza</span>
+            </div>
+
             <Divider />
 
             {/* Speed */}
@@ -276,7 +313,7 @@ export function FloatingBar({
               </button>
             )}
             {isMaster && (
-              <button onClick={() => setWaitMode(!waitMode)} title="Esperar nota antes de avanzar" style={toggleBtnStyle(waitMode)}>
+              <button onClick={() => setWaitMode(!waitMode)} title="Esperar la nota (máximo 10 segundos)" style={toggleBtnStyle(waitMode)}>
                 ⏳
               </button>
             )}
@@ -297,31 +334,6 @@ export function FloatingBar({
                 : <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
               }
             </button>
-
-            <Divider />
-
-            {/* Mode switch */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontSize: 11, fontWeight: gameMode === 'reproduction' ? 600 : 400, color: gameMode === 'reproduction' ? '#fff' : '#444', transition: 'color 0.2s' }}>Libre</span>
-              <button
-                onClick={() => onModeChange(gameMode === 'reproduction' ? 'master' : 'reproduction')}
-                title="Cambiar modo"
-                style={{
-                  position: 'relative', width: 44, height: 24, borderRadius: 12, padding: 0, flexShrink: 0,
-                  background: gameMode === 'master' ? '#22c55e' : '#333', border: 'none',
-                  cursor: 'pointer', transition: 'background 0.25s',
-                }}
-              >
-                <div style={{
-                  position: 'absolute', top: 3,
-                  left: gameMode === 'master' ? 23 : 3,
-                  width: 18, height: 18, borderRadius: '50%', background: '#fff',
-                  transition: 'left 0.25s cubic-bezier(0.34,1.56,0.64,1)',
-                  boxShadow: '0 1px 4px rgba(0,0,0,0.4)',
-                }} />
-              </button>
-              <span style={{ fontSize: 11, fontWeight: gameMode === 'master' ? 600 : 400, color: gameMode === 'master' ? '#fff' : '#444', transition: 'color 0.2s' }}>Master</span>
-            </div>
 
           </div>
         </div>
@@ -469,7 +481,10 @@ function MetronomePanel({ bpm, tempo, currentBeat, isActive, onToggle }: {
 }
 
 function KeyboardPanel() {
-  const { expectedNote, detectedNote } = useGameStore()
+  const { expectedNote, detectedNote } = useGameStore(useShallow((state) => ({
+    expectedNote: state.expectedNote,
+    detectedNote: state.detectedNote,
+  })))
   const expMidi = expectedNote?.midi
   const detMidi = detectedNote?.midi
 

@@ -1,4 +1,5 @@
 import { useGameStore } from '../store/useGameStore'
+import { useShallow } from 'zustand/react/shallow'
 import { RESULT_COLORS, RESULT_TEXT } from '../utils/timingUtils'
 
 function gradeForAccuracy(accuracy: number) {
@@ -10,7 +11,12 @@ function gradeForAccuracy(accuracy: number) {
 }
 
 export function GameHUD() {
-  const { score, attempts, gameState, gameMode } = useGameStore()
+  const { score, attempts, gameState, gameMode } = useGameStore(useShallow((state) => ({
+    score: state.score,
+    attempts: state.attempts,
+    gameState: state.gameState,
+    gameMode: state.gameMode,
+  })))
   const lastAttempt = attempts.at(-1)
   const hasScore = attempts.length > 0
   const active = gameState === 'playing' || (gameMode === 'master' && gameState === 'paused')

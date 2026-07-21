@@ -1,7 +1,14 @@
 import { useGameStore } from '../store/useGameStore'
+import { useShallow } from 'zustand/react/shallow'
 
 export function NoteOverlay() {
-  const { currentBeatBounds, currentTabBounds, failedBeatOverlays, gameState, gameMode } = useGameStore()
+  const { currentBeatBounds, currentTabBounds, failedBeatOverlays, gameState, gameMode } = useGameStore(useShallow((state) => ({
+    currentBeatBounds: state.currentBeatBounds,
+    currentTabBounds: state.currentTabBounds,
+    failedBeatOverlays: state.failedBeatOverlays,
+    gameState: state.gameState,
+    gameMode: state.gameMode,
+  })))
 
   const isActive = gameState === 'playing' || (gameMode === 'master' && gameState === 'paused')
 

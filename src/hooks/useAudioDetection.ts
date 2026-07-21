@@ -1,13 +1,18 @@
 // @refresh reset
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { PitchDetector } from 'pitchy'
+import { useShallow } from 'zustand/react/shallow'
 import { useGameStore } from '../store/useGameStore'
 import { hzToMidi, midiToNoteName } from '../utils/noteUtils'
+import { isRmsAttack } from '../audio/detectionUtils'
+import {
+  MIN_DETECTION_CLARITY,
+  MIN_DETECTION_STABLE_FRAMES,
+} from '../game/noteEvaluation'
 
 // 4096 samples keep enough low-E cycles for MPM while cutting the previous
 // analysis window roughly in half (≈93 ms at 44.1 kHz instead of ≈186 ms).
 const BUFFER_SIZE = 4096
-const CLARITY_THRESHOLD = 0.82
 // Guitar range: E2 (82 Hz) to high E (1318 Hz) with a bit of margin
 const MIN_FREQUENCY = 70
 const MAX_FREQUENCY = 1400
@@ -19,7 +24,7 @@ const MIN_GUITAR_MIDI = 40
 // it's the same string still ringing — keep original onset
 const GAP_TOLERANCE_MS = 300
 const SMOOTHING_WINDOW = 5
-const MIN_STABLE_FRAMES = 2
+const ANALYSIS_INTERVAL_MS = 24
 
 function median(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b)
@@ -55,7 +60,10 @@ export function useAudioDetection() {
   const streamRef = useRef<MediaStream | null>(null)
   const animFrameRef = useRef<number>(0)
 
-  const { setDetectedNote, noiseFloor } = useGameStore()
+  const { setDetectedNote, noiseFloor } = useGameStore(useShallow((state) => ({
+    setDetectedNote: state.setDetectedNote,
+    noiseFloor: state.noiseFloor,
+  })))
   const noiseFloorRef = useRef(noiseFloor)
   useEffect(() => { noiseFloorRef.current = noiseFloor }, [noiseFloor])
 
@@ -69,6 +77,13 @@ export function useAudioDetection() {
   const candidateMidiRef = useRef<number | null>(null)
   const stableFramesRef = useRef(0)
   const missingFramesRef = useRef(0)
+  const lastAnalysisRef = useRef(0)
+  const rmsBaselineRef = useRef(0)
+  const lastAttackRef = useRef(Number.NEGATIVE_INFINITY)
+  const pendingAttackRef = useRef(0)
+  const lastPublishedAtRef = useRef(0)
+  const lastPublishedMidiRef = useRef<number | null>(null)
+  const lastPublishedOnsetRef = useRef(0)
 
   // sampleRate passed as arg to avoid an extra useRef that changes hook count
   const startDetectionLoop = useCallback(
@@ -76,6 +91,12 @@ export function useAudioDetection() {
       const buffer = bufferRef.current!
 
       const detect = () => {
+        const frameNow = performance.now()
+        if (frameNow - lastAnalysisRef.current < ANALYSIS_INTERVAL_MS) {
+          animFrameRef.current = requestAnimationFrame(detect)
+          return
+        }
+        lastAnalysisRef.current = frameNow
         analyser.getFloatTimeDomainData(buffer)
 
         // RMS energy gate — ignore signal below noise floor
@@ -83,7 +104,22 @@ export function useAudioDetection() {
         for (let i = 0; i < buffer.length; i++) sum += buffer[i] * buffer[i]
         const rms = Math.sqrt(sum / buffer.length)
 
-        const adaptiveGate = Math.max(0.003, noiseFloorRef.current * 1.15)
+        const adaptiveGate = Math.max(0.0025, noiseFloorRef.current * 1.25)
+        const baseline = rmsBaselineRef.current || rms
+        const attackDetected = isRmsAttack(
+          rms,
+          baseline,
+          adaptiveGate,
+          frameNow - lastAttackRef.current,
+        )
+        if (attackDetected) {
+          lastAttackRef.current = frameNow
+          pendingAttackRef.current = frameNow
+        }
+        rmsBaselineRef.current = rms < adaptiveGate
+          ? baseline * 0.7 + rms * 0.3
+          : baseline * 0.9 + rms * 0.1
+
         if (rms < adaptiveGate) {
           if (prevMidiRef.current !== null) {
             lastKnownMidiRef.current = prevMidiRef.current
@@ -103,7 +139,7 @@ export function useAudioDetection() {
         const [frequency, clarity] = detector.findPitch(buffer, sampleRate)
 
         if (
-          clarity >= CLARITY_THRESHOLD &&
+          clarity >= MIN_DETECTION_CLARITY &&
           frequency >= MIN_FREQUENCY &&
           frequency <= MAX_FREQUENCY
         ) {
@@ -126,12 +162,15 @@ export function useAudioDetection() {
             stableFramesRef.current = 1
           }
 
-          if (stableFramesRef.current < MIN_STABLE_FRAMES) {
+          if (stableFramesRef.current < MIN_DETECTION_STABLE_FRAMES) {
             animFrameRef.current = requestAnimationFrame(detect)
             return
           }
 
-          // New onset: coming from silence or a different note
+          // A new pitch or a fresh RMS attack starts a note. The RMS path is
+          // essential for repeated notes where MIDI does not change between plucks.
+          const pendingAttack = pendingAttackRef.current
+          const hasFreshAttack = pendingAttack > onsetTimeRef.current && now - pendingAttack < 450
           if (prevMidiRef.current === null || prevMidiRef.current !== midi) {
             // Gap-tolerant: if the same MIDI re-appears after a brief signal
             // dropout, it's the same string still ringing — keep the original
@@ -141,23 +180,36 @@ export function useAudioDetection() {
               midi === lastKnownMidiRef.current &&
               now - gapStartRef.current < GAP_TOLERANCE_MS
 
-            if (!isSameNoteAfterGap) {
-              onsetTimeRef.current = now
+            if (!isSameNoteAfterGap || hasFreshAttack) {
+              onsetTimeRef.current = hasFreshAttack ? pendingAttack : now
             }
             prevMidiRef.current = midi
+          } else if (hasFreshAttack) {
+            onsetTimeRef.current = pendingAttack
+          }
+          if (hasFreshAttack) {
+            pendingAttackRef.current = 0
           }
 
-          setDetectedNote({
-            midi,
-            name: midiToNoteName(midi),
-            frequency: correctedFrequency,
-            clarity,
-            timestamp: now,
-            onset: onsetTimeRef.current,
-            cents: Math.round(1200 * Math.log2(correctedFrequency / (440 * Math.pow(2, (midi - 69) / 12)))),
-            rms,
-            stableFrames: stableFramesRef.current,
-          })
+          const isImportantChange =
+            midi !== lastPublishedMidiRef.current ||
+            onsetTimeRef.current !== lastPublishedOnsetRef.current
+          if (isImportantChange || now - lastPublishedAtRef.current >= 60) {
+            setDetectedNote({
+              midi,
+              name: midiToNoteName(midi),
+              frequency: correctedFrequency,
+              clarity,
+              timestamp: now,
+              onset: onsetTimeRef.current,
+              cents: Math.round(1200 * Math.log2(correctedFrequency / (440 * Math.pow(2, (midi - 69) / 12)))),
+              rms,
+              stableFrames: stableFramesRef.current,
+            })
+            lastPublishedAtRef.current = now
+            lastPublishedMidiRef.current = midi
+            lastPublishedOnsetRef.current = onsetTimeRef.current
+          }
         } else {
           if (prevMidiRef.current !== null) {
             lastKnownMidiRef.current = prevMidiRef.current
@@ -251,6 +303,20 @@ export function useAudioDetection() {
     streamRef.current?.getTracks().forEach((t) => t.stop())
     audioContextRef.current?.close()
     analyserRef.current = null
+    prevMidiRef.current = null
+    lastKnownMidiRef.current = null
+    candidateMidiRef.current = null
+    stableFramesRef.current = 0
+    missingFramesRef.current = 0
+    frequencyHistoryRef.current = []
+    onsetTimeRef.current = 0
+    pendingAttackRef.current = 0
+    lastAttackRef.current = Number.NEGATIVE_INFINITY
+    rmsBaselineRef.current = 0
+    lastAnalysisRef.current = 0
+    lastPublishedAtRef.current = 0
+    lastPublishedMidiRef.current = null
+    lastPublishedOnsetRef.current = 0
     setIsListening(false)
     setDetectedNote(null)
   }, [setDetectedNote])

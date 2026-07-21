@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { DetectedNote, ExpectedNote, NoteAttempt, NoteResult, GameState, GameMode, Score, BeatBounds } from '../types'
+import type { DetectedNote, ExpectedNote, NoteAttempt, GameState, GameMode, Score, BeatBounds } from '../types'
+import { applyAttemptToScore, EMPTY_SCORE, evaluateAttempt } from '../game/noteEvaluation'
 
 interface FailedBeatOverlay {
   key: string
@@ -35,8 +36,8 @@ interface GameStore {
   currentTabBounds: BeatBounds | null
   failedBeatOverlays: FailedBeatOverlay[]
 
-  // Master mode: callback to resume AlphaTab playback
-  resumePlayback: (() => void) | null
+  // Teaching mode: deterministic callback to select the next playable beat
+  advanceLesson: (() => void) | null
 
   // History for heatmap
   attempts: NoteAttempt[]
@@ -60,49 +61,19 @@ interface GameStore {
   setCurrentTabBounds: (bounds: BeatBounds | null) => void
   markCurrentBeatFailed: () => void
   fadeFailed: () => void
-  setResumePlayback: (fn: () => void) => void
-  evaluateNote: () => void
+  setAdvanceLesson: (fn: () => void) => void
+  evaluateNote: (detectedOverride?: DetectedNote | null) => NoteAttempt | null
   resetGame: () => void
   updatePosition: (bar: number, beat: number) => void
 }
 
-const initialScore: Score = {
-  perfect: 0,
-  good: 0,
-  late: 0,
-  early: 0,
-  wrong: 0,
-  miss: 0,
-  streak: 0,
-  maxStreak: 0,
-  accuracy: 0,
-  points: 0,
-  multiplier: 1,
-}
-
-const RESULT_WEIGHT: Record<NoteResult, number> = {
-  perfect: 1,
-  good: 0.8,
-  late: 0.55,
-  early: 0.55,
-  wrong: 0,
-  miss: 0,
-}
-
-const RESULT_POINTS: Record<NoteResult, number> = {
-  perfect: 1000,
-  good: 750,
-  late: 500,
-  early: 500,
-  wrong: 0,
-  miss: 0,
-}
+const initialScore: Score = { ...EMPTY_SCORE }
 
 export const useGameStore = create<GameStore>()(
   persist(
     (set, get) => ({
       gameState: 'idle',
-      gameMode: 'reproduction',
+      gameMode: 'master',
       currentSongFile: null,
       songDuration: 0,
       latencyOffset: 0,
@@ -119,7 +90,7 @@ export const useGameStore = create<GameStore>()(
       currentBeatBounds: null,
       currentTabBounds: null,
       failedBeatOverlays: [],
-      resumePlayback: null,
+      advanceLesson: null,
       attempts: [],
       score: { ...initialScore },
 
@@ -136,7 +107,7 @@ export const useGameStore = create<GameStore>()(
       setIsMuted: (v) => set({ isMuted: v }),
       setCurrentBeatBounds: (bounds) => set({ currentBeatBounds: bounds }),
       setCurrentTabBounds: (bounds) => set({ currentTabBounds: bounds }),
-      setResumePlayback: (fn) => set({ resumePlayback: fn }),
+      setAdvanceLesson: (fn) => set({ advanceLesson: fn }),
       markCurrentBeatFailed: () => {
         const { currentBeatBounds, expectedNote, failedBeatOverlays } = get()
         if (!currentBeatBounds || !expectedNote) return
@@ -158,84 +129,19 @@ export const useGameStore = create<GameStore>()(
       // ─────────────────────────────────────────────────
       // CORE ENGINE: compare expected vs detected note
       // ─────────────────────────────────────────────────
-      evaluateNote: () => {
+      evaluateNote: (detectedOverride) => {
         const { expectedNote, detectedNote, latencyOffset, score, gameMode } = get()
-        if (!expectedNote) return
+        if (!expectedNote) return null
 
-        let result: NoteResult
-        let timeDiff = 0
-
-        if (!detectedNote || detectedNote.clarity < 0.82 || detectedNote.stableFrames < 2) {
-          result = 'miss'
-        } else if (gameMode === 'master') {
-          const adjustedOnset = detectedNote.onset - latencyOffset
-          timeDiff = Math.max(0, adjustedOnset - expectedNote.timestamp)
-          const matches = expectedNote.chordMidis?.includes(detectedNote.midi)
-            ?? detectedNote.midi === expectedNote.midi
-
-          if (!matches) result = 'wrong'
-          else if (timeDiff <= 350) result = 'perfect'
-          else if (timeDiff <= 700) result = 'good'
-          else result = 'late'
-        } else if (detectedNote.onset < expectedNote.timestamp - 300) {
-          // Reproduction mode: note onset predates this beat — string was ringing before beat fired
-          result = 'miss'
-        } else {
-          // Reproduction mode: check timing + pitch
-          const adjustedDetectedTime = detectedNote.timestamp - latencyOffset
-          timeDiff = adjustedDetectedTime - expectedNote.timestamp
-
-          const noteMatch = expectedNote.chordMidis?.includes(detectedNote.midi)
-            ?? detectedNote.midi === expectedNote.midi
-
-          if (!noteMatch) {
-            result = 'wrong'
-          } else if (Math.abs(timeDiff) <= 100) {
-            result = 'perfect'
-          } else if (Math.abs(timeDiff) <= 200) {
-            result = 'good'
-          } else if (timeDiff > 200) {
-            result = 'late'
-          } else {
-            result = 'early'
-          }
-        }
-
-        const attempt: NoteAttempt = {
-          expected: expectedNote,
-          detected: detectedNote,
-          result,
-          timeDiff,
-        }
-
-        const isHit = ['perfect', 'good', 'late', 'early'].includes(result)
-        const newStreak = isHit ? score.streak + 1 : 0
-        const newMaxStreak = Math.max(score.maxStreak, newStreak)
-        const multiplier = Math.min(4, 1 + Math.floor(newStreak / 10))
-
-        const newScore: Score = {
-          ...score,
-          [result]: (score[result as keyof Score] as number) + 1,
-          streak: newStreak,
-          maxStreak: newMaxStreak,
-          multiplier,
-          points: score.points + RESULT_POINTS[result] * (isHit ? multiplier : 1),
-        }
-
-        const total =
-          newScore.perfect + newScore.good + newScore.late +
-          newScore.early + newScore.wrong + newScore.miss
-        const weightedHits =
-          newScore.perfect * RESULT_WEIGHT.perfect +
-          newScore.good * RESULT_WEIGHT.good +
-          newScore.late * RESULT_WEIGHT.late +
-          newScore.early * RESULT_WEIGHT.early
-        newScore.accuracy = total > 0 ? Math.round((weightedHits / total) * 100) : 0
+        const selectedDetection = detectedOverride === undefined ? detectedNote : detectedOverride
+        const attempt = evaluateAttempt(expectedNote, selectedDetection, gameMode, latencyOffset)
+        const newScore = applyAttemptToScore(score, attempt.result)
 
         set((state) => ({
           attempts: [...state.attempts.slice(-499), attempt],
           score: newScore,
         }))
+        return attempt
       },
 
       resetGame: () =>

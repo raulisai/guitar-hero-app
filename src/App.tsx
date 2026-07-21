@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { ScoreViewer, type ScoreViewerHandle } from './components/ScoreViewer'
 import { Calibration } from './components/Calibration'
 import { FloatingBar } from './components/FloatingBar'
@@ -35,11 +36,29 @@ export default function App() {
   const [syncedSongs, setSyncedSongs] = useState<DemoSong[]>([])
   const scoreRef = useRef<ScoreViewerHandle>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const { isCalibrated, gameMode, gameState, setGameMode, resetGame, fadeFailed, songBpm, micEnabled, setMicEnabled } = useGameStore()
+  const { isCalibrated, gameMode, gameState, setGameMode, resetGame, fadeFailed, songBpm, micEnabled, setMicEnabled } = useGameStore(useShallow((state) => ({
+    isCalibrated: state.isCalibrated,
+    gameMode: state.gameMode,
+    gameState: state.gameState,
+    setGameMode: state.setGameMode,
+    resetGame: state.resetGame,
+    fadeFailed: state.fadeFailed,
+    songBpm: state.songBpm,
+    micEnabled: state.micEnabled,
+    setMicEnabled: state.setMicEnabled,
+  })))
   const { barHidden, showBar, hideNow } = useAutoHide(gameMode)
 
   // Audio detection — lifted to App so mic button in FloatingBar and MicPill share one instance
-  const { isListening, isRequesting, error: micError, startListening, stopListening } = useAudioDetection()
+  const {
+    isListening,
+    isRequesting,
+    error: micError,
+    startListening,
+    stopListening,
+    analyserRef,
+    measureAmbientRms,
+  } = useAudioDetection()
 
   useGameLoop()
   useMetronome(isMetronome, songBpm, tempo)
@@ -113,6 +132,14 @@ export default function App() {
     scoreRef.current?.stop()
     resetGame()
   }, [resetGame])
+
+  const handlePlay = useCallback(async () => {
+    fadeFailed()
+    if (gameMode === 'master' && !isListening && !isRequesting) {
+      await startListening()
+    }
+    scoreRef.current?.play()
+  }, [fadeFailed, gameMode, isListening, isRequesting, startListening])
 
   const handleRepositorySong = useCallback(async (entry: RepositoryFile) => {
     const response = await fetch(entry.downloadUrl)
@@ -325,6 +352,10 @@ export default function App() {
             <Calibration
               onComplete={() => setShowCalibration(false)}
               initialTab={calibrationTab}
+              isListening={isListening}
+              startListening={startListening}
+              analyserRef={analyserRef}
+              measureAmbientRms={measureAmbientRms}
             />
           </div>
         )}
@@ -334,7 +365,7 @@ export default function App() {
       <FloatingBar
         hasFile={!!songFile}
         tempo={tempo}
-        onPlay={() => { fadeFailed(); scoreRef.current?.play() }}
+        onPlay={() => { void handlePlay() }}
         onPause={() => scoreRef.current?.pause()}
         onStop={() => scoreRef.current?.stop()}
         onTempoChange={(r) => scoreRef.current?.setTempo(r)}

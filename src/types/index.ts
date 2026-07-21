@@ -13,7 +13,7 @@ export interface DetectedNote {
 export interface ExpectedNote {
   midi: number
   name: string
-  timestamp: number    // ms within the song
+  timestamp: number    // performance.now() when this beat becomes active
   beat: number         // beat index in the song
   bar: number          // bar index
   duration: number     // duration in ms

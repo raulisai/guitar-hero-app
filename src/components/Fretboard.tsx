@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { useGameStore } from '../store/useGameStore'
 import { FINGER_NAMES } from '../utils/fingeringUtils'
 
@@ -11,7 +12,11 @@ const FRET_MARKERS = [3, 5, 7, 9, 15, 17]
 const DOUBLE_MARKER = 12
 
 export function Fretboard({ compact }: { compact?: boolean }) {
-  const { expectedNote, gameState, gameMode } = useGameStore()
+  const { expectedNote, gameState, gameMode } = useGameStore(useShallow((state) => ({
+    expectedNote: state.expectedNote,
+    gameState: state.gameState,
+    gameMode: state.gameMode,
+  })))
   const [showHands, setShowHands] = useState(true)
 
   const isActive = gameState === 'playing' || (gameMode === 'master' && gameState === 'paused')
@@ -151,12 +156,11 @@ export function Fretboard({ compact }: { compact?: boolean }) {
         {/* Strings Layer */}
         <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', pointerEvents: 'none' }}>
           {strings.map((stringNum, idx) => {
-            // Display: string 1 = TOP (thin/high-E), string 6 = BOTTOM (thick/low-E)
-            // AlphaTab convention: string 1 = low-E (bottom), string 6 = high-E (top)
-            // Invert to match: alphaTabString = NUM_STRINGS + 1 - displayString
+            // AlphaTab/Guitar Pro convention: string 1 is high E at the top and
+            // string 6 is low E at the bottom, matching standard TAB notation.
             const stringThickness = 1 + (idx * 0.5)
             const isPlayingThisString = showIndicator &&
-              expectedNote.stringNumber === (NUM_STRINGS + 1 - stringNum)
+              expectedNote.stringNumber === stringNum
 
             return (
               <div
@@ -207,9 +211,7 @@ function Indicator({ stringNum, fretNum, fingerNum, showHands }: { stringNum: nu
   const fretX = fretNum === 0
     ? 0
     : Math.min(Math.max((fretNum + 0.5) * (100 / NUM_FRET_BLOCKS), 0), 100)
-  // AlphaTab string 1 = low-E (should render at BOTTOM); invert for display
-  const displayStringNum = NUM_STRINGS + 1 - stringNum
-  const stringY = (displayStringNum - 0.5) * (100 / NUM_STRINGS)
+  const stringY = (stringNum - 0.5) * (100 / NUM_STRINGS)
 
   // Spring-like easing: slight overshoot → natural hand movement feel
   const spring = '0.22s cubic-bezier(0.34, 1.56, 0.64, 1)'

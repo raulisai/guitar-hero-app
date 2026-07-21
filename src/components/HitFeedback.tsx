@@ -30,7 +30,7 @@ let _nextId = 0
 
 export function HitFeedback() {
   const [particles, setParticles] = useState<Particle[]>([])
-  const { attempts } = useGameStore()
+  const attempts = useGameStore((state) => state.attempts)
   const prevLenRef = useRef(0)
 
   useEffect(() => {
@@ -43,7 +43,7 @@ export function HitFeedback() {
     prevLenRef.current = len
 
     const latest = attempts[len - 1]
-    // Capture bounds at evaluation time, before resumePlayback advances the cursor
+    // Capture bounds at evaluation time, before the lesson advances the cursor
     const { currentTabBounds, currentBeatBounds } = useGameStore.getState()
     const bounds = currentTabBounds ?? currentBeatBounds
     if (!bounds) return

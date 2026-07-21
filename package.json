@@ -11,6 +11,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "npm run lint && npm test && npm run build",
     "preview": "vite preview",
     "repertoire:sync": "node scripts/sync-repertoire.mjs"
   },
@@ -38,6 +41,7 @@
     "globals": "^17.7.0",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.65.0",
-    "vite": "^7.3.5"
+    "vite": "^7.3.5",
+    "vitest": "^4.1.10"
   }
 }

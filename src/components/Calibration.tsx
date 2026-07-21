@@ -1,8 +1,9 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
+import type { RefObject } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import * as Tone from 'tone'
 import { calculateLatencyOffset } from '../utils/calibrationUtils'
 import { useGameStore } from '../store/useGameStore'
-import { useAudioDetection } from '../hooks/useAudioDetection'
 import { hzToCents, OPEN_STRINGS } from '../utils/noteUtils'
 
 const CALIBRATION_BEATS = 10
@@ -11,6 +12,10 @@ const BPM = 60
 interface CalibrationProps {
   onComplete: () => void
   initialTab?: Tab
+  isListening: boolean
+  startListening: () => Promise<void>
+  analyserRef: RefObject<AnalyserNode | null>
+  measureAmbientRms: (durationMs?: number) => Promise<number>
 }
 
 type Tab = 'tuner' | 'latency'
@@ -126,7 +131,14 @@ function SignalMeter({ rms, noiseFloor }: { rms: number; noiseFloor: number }) {
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
-export function Calibration({ onComplete, initialTab }: CalibrationProps) {
+export function Calibration({
+  onComplete,
+  initialTab,
+  isListening,
+  startListening,
+  analyserRef,
+  measureAmbientRms,
+}: CalibrationProps) {
   const [tab, setTab] = useState<Tab>(initialTab ?? 'tuner')
   const [latencyPhase, setLatencyPhase] = useState<'idle' | 'recording' | 'done'>('idle')
   const [clickCount, setClickCount] = useState(0)
@@ -136,16 +148,27 @@ export function Calibration({ onComplete, initialTab }: CalibrationProps) {
   const [noiseCountdown, setNoiseCountdown] = useState(3)
 
   const samplesRef = useRef<{ expectedTime: number; detectedTime: number }[]>([])
-  const lastDetectedTimeRef = useRef<number>(0)
+  const lastDetectedOnsetRef = useRef<number>(0)
   const rmsFrameRef = useRef<number>(0)
+  const latencyCleanupRef = useRef<(() => void) | null>(null)
 
-  const { setLatencyOffset, setNoiseFloor, noiseFloor, latencyOffset, isCalibrated, detectedNote } = useGameStore()
-  const { isListening, startListening, analyserRef, measureAmbientRms } = useAudioDetection()
+  const { setLatencyOffset, setNoiseFloor, noiseFloor, latencyOffset, isCalibrated, detectedNote } = useGameStore(useShallow((state) => ({
+    setLatencyOffset: state.setLatencyOffset,
+    setNoiseFloor: state.setNoiseFloor,
+    noiseFloor: state.noiseFloor,
+    latencyOffset: state.latencyOffset,
+    isCalibrated: state.isCalibrated,
+    detectedNote: state.detectedNote,
+  })))
 
-  // Track latest detected timestamp for latency sampling
+  // Track fresh attacks only; a sustained note updates timestamp every frame.
   useEffect(() => {
-    if (detectedNote) lastDetectedTimeRef.current = detectedNote.timestamp
+    if (detectedNote && detectedNote.onset > lastDetectedOnsetRef.current) {
+      lastDetectedOnsetRef.current = detectedNote.onset
+    }
   }, [detectedNote])
+
+  useEffect(() => () => latencyCleanupRef.current?.(), [])
 
   // Live RMS meter loop
   useEffect(() => {
@@ -201,35 +224,49 @@ export function Calibration({ onComplete, initialTab }: CalibrationProps) {
     let beat = 0
 
     await Tone.start()
+    Tone.getTransport().stop()
+    Tone.getTransport().cancel()
     Tone.getTransport().bpm.value = BPM
+    const synth = new Tone.Synth({
+      oscillator: { type: 'square' },
+      envelope: { attack: 0.001, decay: 0.1, sustain: 0, release: 0.1 },
+    }).toDestination()
 
     const loop = new Tone.Loop((time) => {
-      const synth = new Tone.Synth({
-        oscillator: { type: 'square' },
-        envelope: { attack: 0.001, decay: 0.1, sustain: 0, release: 0.1 },
-      }).toDestination()
       synth.triggerAttackRelease('C5', '16n', time)
 
-      const expectedTime = Tone.now() * 1000
+      // Convert Tone's audio-context schedule to the same performance.now()
+      // clock used by the pitch detector.
+      const expectedTime = performance.now() + Math.max(0, (time - Tone.now()) * 1000)
+      const onsetBeforeClick = lastDetectedOnsetRef.current
 
       setTimeout(() => {
-        if (lastDetectedTimeRef.current > 0) {
-          samplesRef.current.push({ expectedTime, detectedTime: lastDetectedTimeRef.current })
+        const detectedOnset = lastDetectedOnsetRef.current
+        if (detectedOnset > onsetBeforeClick && detectedOnset >= expectedTime - 100) {
+          samplesRef.current.push({ expectedTime, detectedTime: detectedOnset })
         }
         beat++
         setClickCount(beat)
 
         if (beat >= CALIBRATION_BEATS) {
-          loop.stop()
-          Tone.getTransport().stop()
+          latencyCleanupRef.current?.()
+          latencyCleanupRef.current = null
           const offset = calculateLatencyOffset(samplesRef.current)
           setLatencyOffset(offset)
           setMeasuredLatency(offset)
           setLatencyPhase('done')
           setTimeout(onComplete, 2500)
         }
-      }, 500)
+      }, 650)
     }, '4n')
+
+    latencyCleanupRef.current = () => {
+      loop.stop()
+      loop.dispose()
+      synth.dispose()
+      Tone.getTransport().stop()
+      Tone.getTransport().cancel()
+    }
 
     loop.start(0)
     Tone.getTransport().start()

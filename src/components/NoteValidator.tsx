@@ -1,5 +1,8 @@
 import { useGameStore } from '../store/useGameStore'
+import { useShallow } from 'zustand/react/shallow'
 import { RESULT_COLORS, RESULT_TEXT } from '../utils/timingUtils'
+import { isUsableDetection, matchesExpectedNote } from '../game/noteEvaluation'
+import { MASTER_EARLY_INPUT_GRACE_MS } from '../game/masterProgression'
 
 interface NoteValidatorProps {
   isListening: boolean
@@ -14,13 +17,25 @@ export function NoteValidator({
   error,
   onToggleMic,
 }: NoteValidatorProps) {
-  const { detectedNote, expectedNote, attempts, score, gameState, gameMode } = useGameStore()
+  const { detectedNote, expectedNote, attempts, score, gameState, gameMode } = useGameStore(useShallow((state) => ({
+    detectedNote: state.detectedNote,
+    expectedNote: state.expectedNote,
+    attempts: state.attempts,
+    score: state.score,
+    gameState: state.gameState,
+    gameMode: state.gameMode,
+  })))
   const lastAttempt = attempts.at(-1)
-  const matches = Boolean(
-    detectedNote &&
+  const pitchMatches = Boolean(
     expectedNote &&
-    (expectedNote.chordMidis?.includes(detectedNote.midi) ?? detectedNote.midi === expectedNote.midi)
+    isUsableDetection(detectedNote) &&
+    matchesExpectedNote(expectedNote, detectedNote)
   )
+  const freshnessGrace = gameMode === 'master' ? MASTER_EARLY_INPUT_GRACE_MS : 220
+  const isFreshAttack = Boolean(
+    detectedNote && expectedNote && detectedNote.onset >= expectedNote.timestamp - freshnessGrace
+  )
+  const matches = pitchMatches && isFreshAttack
   const isActive = gameState === 'playing' || (gameMode === 'master' && gameState === 'paused')
 
   let status: string
@@ -37,6 +52,9 @@ export function NoteValidator({
     state = 'listening'
   } else if (!detectedNote) {
     status = 'Escuchando tu guitarra…'
+    state = 'listening'
+  } else if (pitchMatches && !isFreshAttack) {
+    status = 'Vuelve a pulsar la cuerda'
     state = 'listening'
   } else if (matches) {
     status = 'Nota correcta'

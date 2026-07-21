@@ -1,9 +1,11 @@
 import { useEffect, useRef, useCallback } from 'react'
 import * as alphaTab from '@coderline/alphatab'
+import { useShallow } from 'zustand/react/shallow'
 import { useGameStore } from '../store/useGameStore'
 import { midiToNoteName } from '../utils/noteUtils'
 import { getFingeringSuggestion } from '../utils/fingeringUtils'
 import type { ExpectedNote } from '../types'
+import { findNextPlayableLessonBeat, findPlayableLessonBeat } from '../game/lessonNavigator'
 
 // Standard guitar range: E2 (MIDI 40) to E6 (MIDI 88)
 const GUITAR_MIDI_MIN = 40
@@ -15,9 +17,16 @@ function clampToGuitarMidi(midi: number): number {
   return midi
 }
 
+// AlphaTab's model numbers strings from the lowest-pitched string upward,
+// while guitar tablature labels string 1 as high E and string 6 as low E.
+function toTabStringNumber(alphaTabString: number): number {
+  return alphaTabString >= 1 && alphaTabString <= 6 ? 7 - alphaTabString : alphaTabString
+}
+
 const { PlayerState } = alphaTab.synth
 type PositionChangedEventArgs = alphaTab.synth.PositionChangedEventArgs
 type PlayerStateChangedEventArgs = alphaTab.synth.PlayerStateChangedEventArgs
+type LessonBeatLookup = alphaTab.midi.MidiTickLookupFindBeatResult
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function buildSettings(scrollElement: HTMLElement | null): any {
@@ -55,14 +64,22 @@ export function useAlphaTab(
   scrollRef: React.RefObject<HTMLDivElement | null>
 ) {
   const apiRef = useRef<alphaTab.AlphaTabApi | null>(null)
-  const lastMasterBeatKey = useRef<string>('')
   const lastFreeBeatKey   = useRef<string>('')   // debounce free-mode state updates
+  const currentLessonBeatRef = useRef<LessonBeatLookup | null>(null)
+  const startLessonRef = useRef<(() => void) | null>(null)
   const gameMode = useGameStore(s => s.gameMode)
   const isMuted = useGameStore(s => s.isMuted)
   const {
     setExpectedNote, setGameState, updatePosition,
-    setCurrentBeatBounds, setCurrentTabBounds, setResumePlayback,
-  } = useGameStore()
+    setCurrentBeatBounds, setCurrentTabBounds, setAdvanceLesson,
+  } = useGameStore(useShallow((state) => ({
+    setExpectedNote: state.setExpectedNote,
+    setGameState: state.setGameState,
+    updatePosition: state.updatePosition,
+    setCurrentBeatBounds: state.setCurrentBeatBounds,
+    setCurrentTabBounds: state.setCurrentTabBounds,
+    setAdvanceLesson: state.setAdvanceLesson,
+  })))
 
   const getOrCreateApi = useCallback(() => {
     if (apiRef.current) return apiRef.current
@@ -77,13 +94,94 @@ export function useAlphaTab(
     )
     apiRef.current = api
 
-    // Register the play callback so master mode can resume
-    setResumePlayback(() => api.play())
+    const activateLessonBeat = (lookup: LessonBeatLookup) => {
+      const beat = lookup.beat
+      if (beat.notes.length === 0) return
+
+      currentLessonBeatRef.current = lookup
+      const mainNote = beat.notes.reduce((prev, curr) =>
+        prev.realValue < curr.realValue ? prev : curr
+      )
+      const midi = clampToGuitarMidi(mainNote.realValue)
+      const chordMidis = [...new Set(beat.notes.map((note) => clampToGuitarMidi(note.realValue)))]
+      const fingering = getFingeringSuggestion(mainNote.fret, mainNote.leftHandFinger)
+
+      // Moving the cursor directly is reliable on mobile and avoids repeatedly
+      // pausing/resuming AlphaSynth between notes and rests.
+      api.tickPosition = lookup.start
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const boundsLookup = (api as any).renderer?.boundsLookup
+      const beatBounds = boundsLookup?.findBeat(beat)
+      if (beatBounds?.realBounds) {
+        const { x, y, w, h } = beatBounds.realBounds
+        setCurrentBeatBounds({ x, y, w, h })
+
+        type NoteBoundsEntry = { noteHeadBounds?: { x: number; y: number; w: number; h: number } }
+        const withHeads = ((beatBounds.notes ?? []) as NoteBoundsEntry[])
+          .filter((entry) => entry.noteHeadBounds)
+        if (withHeads.length > 0) {
+          const lowestStaffY = Math.max(...withHeads.map((entry) => entry.noteHeadBounds!.y))
+          const tabEntries = withHeads.filter((entry) => lowestStaffY - entry.noteHeadBounds!.y < 100)
+          const minX = Math.min(...tabEntries.map((entry) => entry.noteHeadBounds!.x))
+          const minY = Math.min(...tabEntries.map((entry) => entry.noteHeadBounds!.y))
+          const maxX = Math.max(...tabEntries.map((entry) => entry.noteHeadBounds!.x + entry.noteHeadBounds!.w))
+          const maxY = Math.max(...tabEntries.map((entry) => entry.noteHeadBounds!.y + entry.noteHeadBounds!.h))
+          setCurrentTabBounds({
+            x: minX - 2,
+            y: minY - 2,
+            w: Math.max(maxX - minX + 4, 18),
+            h: Math.max(maxY - minY + 4, 18),
+          })
+        } else {
+          setCurrentTabBounds(null)
+        }
+      } else {
+        setCurrentBeatBounds(null)
+        setCurrentTabBounds(null)
+      }
+
+      setExpectedNote({
+        midi,
+        name: midiToNoteName(midi),
+        timestamp: performance.now(),
+        beat: beat.index,
+        bar: beat.voice.bar.index,
+        duration: lookup.duration,
+        stringNumber: toTabStringNumber(mainNote.string),
+        fretNumber: mainNote.fret,
+        fingerNumber: fingering.finger,
+        handPosition: fingering.position,
+        chordMidis,
+      } as ExpectedNote)
+      updatePosition(beat.voice.bar.index, beat.index)
+      setGameState('paused')
+    }
+
+    startLessonRef.current = () => {
+      if (!api.tickCache) return
+      const first = findPlayableLessonBeat(api.tickCache, 0)
+      if (first) activateLessonBeat(first)
+    }
+
+    setAdvanceLesson(() => {
+      if (!api.tickCache || !currentLessonBeatRef.current) return
+      const next = findNextPlayableLessonBeat(api.tickCache, currentLessonBeatRef.current)
+      if (!next) {
+        currentLessonBeatRef.current = null
+        setExpectedNote(null)
+        setCurrentBeatBounds(null)
+        setCurrentTabBounds(null)
+        setGameState('finished')
+        return
+      }
+      activateLessonBeat(next)
+    })
 
     api.renderFinished.on(() => {
       setGameState('idle')
-      lastMasterBeatKey.current = ''
       lastFreeBeatKey.current = ''
+      currentLessonBeatRef.current = null
       const bpm = api.score?.tempo ?? 0
       if (bpm > 0) useGameStore.getState().setSongBpm(bpm)
     })
@@ -115,7 +213,7 @@ export function useAlphaTab(
           beat: beat.index,
           bar: beat.voice.bar.index,
           duration: lookupResult.duration,
-          stringNumber: mainNote.string,
+          stringNumber: toTabStringNumber(mainNote.string),
           fretNumber: mainNote.fret,
           fingerNumber: fingering.finger,
           handPosition: fingering.position,
@@ -125,80 +223,24 @@ export function useAlphaTab(
         return
       }
 
-      // ── MASTER MODE ──────────────────────────────────────────────────────────
-      // Full logic: bounds lookup for overlays + pause on each new beat.
-
-      // Track visual bounds for note overlays
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const boundsLookup = (api as any).renderer?.boundsLookup
-      const beatBounds = boundsLookup?.findBeat(beat)
-      if (beatBounds?.realBounds) {
-        const { x, y, w, h } = beatBounds.realBounds
-        setCurrentBeatBounds({ x, y, w, h })
-
-        // TAB note bounds: find all note heads on the TAB staff (bottom part of the screen)
-        // and combine their bounds so the rectangle covers the entire chord accurately.
-        type NoteBoundsEntry = { noteHeadBounds?: { x: number; y: number; w: number; h: number } }
-        const allNoteBounds = (beatBounds.notes ?? []) as NoteBoundsEntry[]
-        const withHeads = allNoteBounds.filter((entry) => entry.noteHeadBounds)
-        if (withHeads.length > 0) {
-          const maxY = Math.max(...withHeads.map((entry) => entry.noteHeadBounds!.y))
-          const tabEntries = withHeads.filter((entry) => maxY - entry.noteHeadBounds!.y < 100)
-
-          let minX = Infinity, minY = Infinity
-          let maxX = -Infinity, maxYTotal = -Infinity
-          tabEntries.forEach((entry) => {
-            const nb = entry.noteHeadBounds!
-            if (nb.x < minX)          minX     = nb.x
-            if (nb.y < minY)          minY     = nb.y
-            if (nb.x + nb.w > maxX)   maxX     = nb.x + nb.w
-            if (nb.y + nb.h > maxYTotal) maxYTotal = nb.y + nb.h
-          })
-          setCurrentTabBounds({
-            x: minX - 2, y: minY - 2,
-            w: Math.max(maxX - minX + 4, 18),
-            h: Math.max(maxYTotal - minY + 4, 18),
-          })
-        } else {
-          setCurrentTabBounds(null)
-        }
-      }
-
-      setExpectedNote({
-        midi,
-        name: midiToNoteName(midi),
-        timestamp: performance.now(),   // wall-clock ms — same base as detectedNote
-        beat: beat.index,
-        bar: beat.voice.bar.index,
-        duration: lookupResult.duration,
-        stringNumber: mainNote.string,
-        fretNumber: mainNote.fret,
-        fingerNumber: fingering.finger,
-        handPosition: fingering.position,
-        chordMidis,
-      } as ExpectedNote)
-      updatePosition(beat.voice.bar.index, beat.index)
-
-      // Pause on each new beat so the user can play it
-      if (beatKey !== lastMasterBeatKey.current) {
-        lastMasterBeatKey.current = beatKey
-        api.pause()
-      }
+      // Teaching mode is advanced directly by the lesson sequencer. Ignore
+      // AlphaSynth position events so they cannot pause the session mid-song.
+      return
     })
 
     api.playerStateChanged.on((args: PlayerStateChangedEventArgs) => {
+      if (useGameStore.getState().gameMode === 'master') return
       if (args.state === PlayerState.Playing) {
         setGameState('playing')
       } else if (args.stopped) {
         setGameState('finished')
-        lastMasterBeatKey.current = ''
       } else {
         setGameState('paused')
       }
     })
 
     return api
-  }, [containerRef, scrollRef, setExpectedNote, setGameState, updatePosition, setCurrentBeatBounds, setCurrentTabBounds, setResumePlayback])
+  }, [containerRef, scrollRef, setExpectedNote, setGameState, updatePosition, setCurrentBeatBounds, setCurrentTabBounds, setAdvanceLesson])
 
   const loadSong = useCallback(
     (file?: File | string) => {
@@ -206,8 +248,8 @@ export function useAlphaTab(
       if (!api || !file) return
 
       try { api.stop() } catch { /* ignore if no score loaded yet */ }
-      lastMasterBeatKey.current = ''
       lastFreeBeatKey.current = ''
+      currentLessonBeatRef.current = null
 
       if (file instanceof File) {
         const reader = new FileReader()
@@ -226,11 +268,17 @@ export function useAlphaTab(
   )
 
   const initialize = useCallback((file?: File | string) => { loadSong(file) }, [loadSong])
-  const play = useCallback(() => apiRef.current?.play(), [])
+  const play = useCallback(() => {
+    if (useGameStore.getState().gameMode === 'master') {
+      startLessonRef.current?.()
+      return
+    }
+    apiRef.current?.play()
+  }, [])
   const pause = useCallback(() => apiRef.current?.pause(), [])
   const stop = useCallback(() => {
-    lastMasterBeatKey.current = ''
     lastFreeBeatKey.current = ''
+    currentLessonBeatRef.current = null
     apiRef.current?.stop()
   }, [])
   const setTempo = useCallback((ratio: number) => {
@@ -252,6 +300,7 @@ export function useAlphaTab(
     return () => {
       apiRef.current?.destroy()
       apiRef.current = null
+      startLessonRef.current = null
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
