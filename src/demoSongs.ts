@@ -82,4 +82,13 @@ export const DEMO_SONGS: DemoSong[] = [
   },
 ]
 
+// ── Villa-Lobos Études (real .gp5 files from /soundfonts/gp5/) ──────────
+const VILLA_LOBOS: DemoSong[] = Array.from({ length: 12 }, (_, i) => ({
+  title: `Estudio No. ${i + 1}`,
+  artist: 'Villa-Lobos',
+  tex: `/soundfonts/gp5/villa-lobos_etude${i + 1}.gp5`,
+}))
+
+export const ALL_SONGS: DemoSong[] = [...DEMO_SONGS, ...VILLA_LOBOS]
+
 export const DEFAULT_DEMO = DEMO_SONGS[0]

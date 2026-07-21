@@ -27,7 +27,8 @@ export function BottomBar({
   onToggleDebugLog,
 }: BottomBarProps) {
   const { gameState, gameMode, score, currentBar, currentBeat, attempts, waitMode, setWaitMode, resetGame } = useGameStore()
-  const isPlaying = gameState === 'playing'
+  const isPlaying  = gameState === 'playing'
+  const isMaster   = gameMode === 'master'
   const lastAttempt = attempts[attempts.length - 1]
 
   return (
@@ -129,8 +130,8 @@ export function BottomBar({
         Beat <span style={{ color: '#ccc' }}>{currentBeat + 1}</span>
       </div>
 
-      {/* Last result badge */}
-      {lastAttempt && isPlaying && (
+      {/* Last result badge — master mode only */}
+      {isMaster && lastAttempt && isPlaying && (
         <>
           <div className="w-px h-6" style={{ background: '#333' }} />
           <div
@@ -145,8 +146,8 @@ export function BottomBar({
         </>
       )}
 
-      {/* Accuracy */}
-      {(score.perfect + score.good + score.miss + score.wrong) > 0 && (
+      {/* Accuracy — master mode only */}
+      {isMaster && (score.perfect + score.good + score.miss + score.wrong) > 0 && (
         <>
           <div className="w-px h-6" style={{ background: '#333' }} />
           <div className="text-xs" style={{ color: '#888' }}>
@@ -169,21 +170,23 @@ export function BottomBar({
       {/* Spacer */}
       <div className="flex-1" />
 
-      {/* Debug log toggle */}
-      <button
-        onClick={onToggleDebugLog}
-        title="Mostrar/ocultar log de notas"
-        className="text-xs px-2.5 py-1 rounded transition-colors font-mono"
-        style={{
-          background: showDebugLog ? '#22c55e22' : 'transparent',
-          color: showDebugLog ? '#22c55e' : '#444',
-          border: `1px solid ${showDebugLog ? '#22c55e44' : '#2a2a2a'}`,
-        }}
-        onMouseEnter={(e) => { if (!showDebugLog) e.currentTarget.style.color = '#888' }}
-        onMouseLeave={(e) => { if (!showDebugLog) e.currentTarget.style.color = '#444' }}
-      >
-        LOG
-      </button>
+      {/* Debug log toggle — master mode only */}
+      {isMaster && (
+        <button
+          onClick={onToggleDebugLog}
+          title="Mostrar/ocultar log de notas"
+          className="text-xs px-2.5 py-1 rounded transition-colors font-mono"
+          style={{
+            background: showDebugLog ? '#22c55e22' : 'transparent',
+            color: showDebugLog ? '#22c55e' : '#444',
+            border: `1px solid ${showDebugLog ? '#22c55e44' : '#2a2a2a'}`,
+          }}
+          onMouseEnter={(e) => { if (!showDebugLog) e.currentTarget.style.color = '#888' }}
+          onMouseLeave={(e) => { if (!showDebugLog) e.currentTarget.style.color = '#444' }}
+        >
+          LOG
+        </button>
+      )}
 
       {/* Wait mode toggle — only in master mode */}
       {gameMode === 'master' && (
