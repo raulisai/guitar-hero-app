@@ -1,0 +1,28 @@
+services:
+  guitar-hero-app:
+    build:
+      context: .
+    restart: unless-stopped
+    init: true
+    expose:
+      - "3000"
+    networks:
+      - internal
+      - proxy
+    cpus: "1.0"
+    mem_limit: 512m
+    pids_limit: 100
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: "proxy"
+      traefik.http.routers.guitar-hero-app.rule: "Host(`guitar-hero-app.devdj.lat`)"
+      traefik.http.routers.guitar-hero-app.entrypoints: "websecure"
+      traefik.http.routers.guitar-hero-app.tls: "true"
+      traefik.http.routers.guitar-hero-app.tls.certresolver: "letsencrypt"
+      traefik.http.services.guitar-hero-app.loadbalancer.server.port: "3000"
+
+networks:
+  internal:
+    internal: true
+  proxy:
+    external: true
