@@ -2,10 +2,8 @@ import { useEffect, useRef, useCallback } from 'react'
 import * as alphaTab from '@coderline/alphatab'
 import { useGameStore } from '../store/useGameStore'
 import { midiToNoteName } from '../utils/noteUtils'
+import { getFingeringSuggestion } from '../utils/fingeringUtils'
 import type { ExpectedNote } from '../types'
-
-const MASTER_VOLUME_MUTED = 0
-const MASTER_VOLUME_NORMAL = 1
 
 // Standard guitar range: E2 (MIDI 40) to E6 (MIDI 88)
 const GUITAR_MIDI_MIN = 40
@@ -26,9 +24,10 @@ function buildSettings(scrollElement: HTMLElement | null): any {
   return {
     core: {
       fontDirectory: '/font/',
+      includeNoteBounds: true,
     },
     display: {
-      layoutMode: 'horizontal',
+      layoutMode: 'page',
       staveProfile: 'scoreTab',
       resources: {
         staffLineColor: '#666666',
@@ -45,7 +44,7 @@ function buildSettings(scrollElement: HTMLElement | null): any {
       enableCursor: true,
       scrollElement: scrollElement ?? undefined,
       scrollMode: 2, // OffScreen: scrolls when cursor leaves view
-      scrollOffsetX: -150,
+      scrollOffsetY: -120,
       bufferTimeInMilliseconds: 400,
     },
   }
@@ -57,7 +56,9 @@ export function useAlphaTab(
 ) {
   const apiRef = useRef<alphaTab.AlphaTabApi | null>(null)
   const lastMasterBeatKey = useRef<string>('')
+  const lastFreeBeatKey   = useRef<string>('')   // debounce free-mode state updates
   const gameMode = useGameStore(s => s.gameMode)
+  const isMuted = useGameStore(s => s.isMuted)
   const {
     setExpectedNote, setGameState, updatePosition,
     setCurrentBeatBounds, setCurrentTabBounds, setResumePlayback,
@@ -82,76 +83,106 @@ export function useAlphaTab(
     api.renderFinished.on(() => {
       setGameState('idle')
       lastMasterBeatKey.current = ''
+      lastFreeBeatKey.current = ''
+      const bpm = api.score?.tempo ?? 0
+      if (bpm > 0) useGameStore.getState().setSongBpm(bpm)
     })
 
     api.playerPositionChanged.on((args: PositionChangedEventArgs) => {
       const trackIndices = new Set<number>([0])
       const lookupResult = api.tickCache?.findBeat(trackIndices, args.currentTick)
+      if (!lookupResult?.beat || lookupResult.beat.notes.length === 0) return
 
-      if (lookupResult?.beat && lookupResult.beat.notes.length > 0) {
-        const beat = lookupResult.beat
+      const beat     = lookupResult.beat
+      const mainNote = beat.notes.reduce((prev, curr) =>
+        prev.realValue < curr.realValue ? prev : curr
+      )
+      const midi    = clampToGuitarMidi(mainNote.realValue)
+      const chordMidis = [...new Set(beat.notes.map((note) => clampToGuitarMidi(note.realValue)))]
+      const fingering = getFingeringSuggestion(mainNote.fret, mainNote.leftHandFinger)
+      const beatKey = `${beat.voice.bar.index}-${beat.index}`
 
-        const mainNote = beat.notes.reduce((prev, curr) =>
-          prev.realValue < curr.realValue ? prev : curr
-        )
-        const midi = clampToGuitarMidi(mainNote.realValue)
-
-        // Track visual bounds for note overlays
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const boundsLookup = (api as any).renderer?.boundsLookup
-        const beatBounds = boundsLookup?.findBeat(beat)
-        if (beatBounds?.realBounds) {
-          const { x, y, w, h } = beatBounds.realBounds
-          setCurrentBeatBounds({ x, y, w, h })
-
-          // TAB note bounds: find all note heads on the TAB staff (bottom part of the screen)
-          // and combine their bounds so the rectangle covers the entire chord accurately.
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const allNoteBounds: any[] = beatBounds.notes ?? []
-          const withHeads = allNoteBounds.filter((nb: any) => nb.noteHeadBounds)
-          if (withHeads.length > 0) {
-            const maxY = Math.max(...withHeads.map((nb: any) => nb.noteHeadBounds.y))
-            // TAB notes are those near maxY (e.g., within 100px, covering the TAB staff height)
-            const tabEntries = withHeads.filter((nb: any) => maxY - nb.noteHeadBounds.y < 100)
-            
-            let minX = Infinity, minY = Infinity
-            let maxX = -Infinity, maxYTotal = -Infinity
-            
-            tabEntries.forEach((entry: any) => {
-               const nb = entry.noteHeadBounds
-               if (nb.x < minX) minX = nb.x
-               if (nb.y < minY) minY = nb.y
-               if (nb.x + nb.w > maxX) maxX = nb.x + nb.w
-               if (nb.y + nb.h > maxYTotal) maxYTotal = nb.y + nb.h
-            })
-            
-            const w = Math.max(maxX - minX + 4, 18)
-            const h = Math.max(maxYTotal - minY + 4, 18)
-            
-            setCurrentTabBounds({ x: minX - 2, y: minY - 2, w, h })
-          } else {
-            setCurrentTabBounds(null)
-          }
-        }
-
+      // ── FREE MODE (reproduction) ────────────────────────────────────────────
+      // Skip bounds lookup and evaluation entirely.
+      // Only update fretboard indicator once per new beat to avoid 60fps re-renders.
+      if (useGameStore.getState().gameMode === 'reproduction') {
+        if (beatKey === lastFreeBeatKey.current) return
+        lastFreeBeatKey.current = beatKey
         setExpectedNote({
           midi,
           name: midiToNoteName(midi),
-          timestamp: performance.now(),   // wall-clock ms — same base as detectedNote
+          timestamp: performance.now(),
           beat: beat.index,
           bar: beat.voice.bar.index,
           duration: lookupResult.duration,
           stringNumber: mainNote.string,
           fretNumber: mainNote.fret,
+          fingerNumber: fingering.finger,
+          handPosition: fingering.position,
+          chordMidis,
         } as ExpectedNote)
         updatePosition(beat.voice.bar.index, beat.index)
+        return
+      }
 
-        // Master mode: pause on each new beat so the user can play it
-        const beatKey = `${beat.voice.bar.index}-${beat.index}`
-        if (useGameStore.getState().gameMode === 'master' && beatKey !== lastMasterBeatKey.current) {
-          lastMasterBeatKey.current = beatKey
-          api.pause()
+      // ── MASTER MODE ──────────────────────────────────────────────────────────
+      // Full logic: bounds lookup for overlays + pause on each new beat.
+
+      // Track visual bounds for note overlays
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const boundsLookup = (api as any).renderer?.boundsLookup
+      const beatBounds = boundsLookup?.findBeat(beat)
+      if (beatBounds?.realBounds) {
+        const { x, y, w, h } = beatBounds.realBounds
+        setCurrentBeatBounds({ x, y, w, h })
+
+        // TAB note bounds: find all note heads on the TAB staff (bottom part of the screen)
+        // and combine their bounds so the rectangle covers the entire chord accurately.
+        type NoteBoundsEntry = { noteHeadBounds?: { x: number; y: number; w: number; h: number } }
+        const allNoteBounds = (beatBounds.notes ?? []) as NoteBoundsEntry[]
+        const withHeads = allNoteBounds.filter((entry) => entry.noteHeadBounds)
+        if (withHeads.length > 0) {
+          const maxY = Math.max(...withHeads.map((entry) => entry.noteHeadBounds!.y))
+          const tabEntries = withHeads.filter((entry) => maxY - entry.noteHeadBounds!.y < 100)
+
+          let minX = Infinity, minY = Infinity
+          let maxX = -Infinity, maxYTotal = -Infinity
+          tabEntries.forEach((entry) => {
+            const nb = entry.noteHeadBounds!
+            if (nb.x < minX)          minX     = nb.x
+            if (nb.y < minY)          minY     = nb.y
+            if (nb.x + nb.w > maxX)   maxX     = nb.x + nb.w
+            if (nb.y + nb.h > maxYTotal) maxYTotal = nb.y + nb.h
+          })
+          setCurrentTabBounds({
+            x: minX - 2, y: minY - 2,
+            w: Math.max(maxX - minX + 4, 18),
+            h: Math.max(maxYTotal - minY + 4, 18),
+          })
+        } else {
+          setCurrentTabBounds(null)
         }
+      }
+
+      setExpectedNote({
+        midi,
+        name: midiToNoteName(midi),
+        timestamp: performance.now(),   // wall-clock ms — same base as detectedNote
+        beat: beat.index,
+        bar: beat.voice.bar.index,
+        duration: lookupResult.duration,
+        stringNumber: mainNote.string,
+        fretNumber: mainNote.fret,
+        fingerNumber: fingering.finger,
+        handPosition: fingering.position,
+        chordMidis,
+      } as ExpectedNote)
+      updatePosition(beat.voice.bar.index, beat.index)
+
+      // Pause on each new beat so the user can play it
+      if (beatKey !== lastMasterBeatKey.current) {
+        lastMasterBeatKey.current = beatKey
+        api.pause()
       }
     })
 
@@ -176,6 +207,7 @@ export function useAlphaTab(
 
       try { api.stop() } catch { /* ignore if no score loaded yet */ }
       lastMasterBeatKey.current = ''
+      lastFreeBeatKey.current = ''
 
       if (file instanceof File) {
         const reader = new FileReader()
@@ -198,6 +230,7 @@ export function useAlphaTab(
   const pause = useCallback(() => apiRef.current?.pause(), [])
   const stop = useCallback(() => {
     lastMasterBeatKey.current = ''
+    lastFreeBeatKey.current = ''
     apiRef.current?.stop()
   }, [])
   const setTempo = useCallback((ratio: number) => {
@@ -206,10 +239,13 @@ export function useAlphaTab(
 
   // Mute AlphaTab output in master mode — user should play the note, not hear it
   useEffect(() => {
-    if (apiRef.current) {
-      apiRef.current.masterVolume = gameMode === 'master' ? MASTER_VOLUME_MUTED : MASTER_VOLUME_NORMAL
+    if (!apiRef.current) return
+    if (gameMode === 'master') {
+      apiRef.current.masterVolume = 0
+    } else {
+      apiRef.current.masterVolume = isMuted ? 0 : 1
     }
-  }, [gameMode])
+  }, [gameMode, isMuted])
 
   useEffect(() => {
     getOrCreateApi()

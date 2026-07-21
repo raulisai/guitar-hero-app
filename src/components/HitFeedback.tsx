@@ -49,6 +49,8 @@ export function HitFeedback() {
     if (!bounds) return
 
     const id = _nextId++
+    // Intentional animation event derived from the append-only attempt stream.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setParticles((prev) => [...prev, { id, result: latest.result, bounds }])
 
     setTimeout(() => {

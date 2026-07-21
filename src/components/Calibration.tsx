@@ -10,6 +10,7 @@ const BPM = 60
 
 interface CalibrationProps {
   onComplete: () => void
+  initialTab?: Tab
 }
 
 type Tab = 'tuner' | 'latency'
@@ -125,8 +126,8 @@ function SignalMeter({ rms, noiseFloor }: { rms: number; noiseFloor: number }) {
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
-export function Calibration({ onComplete }: CalibrationProps) {
-  const [tab, setTab] = useState<Tab>('tuner')
+export function Calibration({ onComplete, initialTab }: CalibrationProps) {
+  const [tab, setTab] = useState<Tab>(initialTab ?? 'tuner')
   const [latencyPhase, setLatencyPhase] = useState<'idle' | 'recording' | 'done'>('idle')
   const [clickCount, setClickCount] = useState(0)
   const [measuredLatency, setMeasuredLatency] = useState<number | null>(null)
@@ -148,7 +149,7 @@ export function Calibration({ onComplete }: CalibrationProps) {
 
   // Live RMS meter loop
   useEffect(() => {
-    if (!isListening) { setRms(0); return }
+    if (!isListening) return
 
     const tick = () => {
       const analyser = analyserRef.current

@@ -1,48 +1,52 @@
 import { useGameStore } from '../store/useGameStore'
-import { RESULT_COLORS } from '../utils/timingUtils'
-import type { NoteResult } from '../types'
+import { RESULT_COLORS, RESULT_TEXT } from '../utils/timingUtils'
 
-const HUD_ROWS: { key: NoteResult; label: string }[] = [
-  { key: 'perfect', label: '¡Perfecto!' },
-  { key: 'good', label: 'Bien' },
-  { key: 'late', label: 'Tarde' },
-  { key: 'early', label: 'Pronto' },
-  { key: 'wrong', label: 'Incorrecto' },
-  { key: 'miss', label: 'Fallada' },
-]
+function gradeForAccuracy(accuracy: number) {
+  if (accuracy >= 98) return 'S'
+  if (accuracy >= 92) return 'A'
+  if (accuracy >= 82) return 'B'
+  if (accuracy >= 70) return 'C'
+  return 'D'
+}
 
 export function GameHUD() {
-  const { score, currentBar, currentBeat } = useGameStore()
+  const { score, attempts, gameState, gameMode } = useGameStore()
+  const lastAttempt = attempts.at(-1)
+  const hasScore = attempts.length > 0
+  const active = gameState === 'playing' || (gameMode === 'master' && gameState === 'paused')
+
+  if (!active && !hasScore) return null
+
+  const grade = gradeForAccuracy(score.accuracy)
+  const feedbackColor = lastAttempt ? RESULT_COLORS[lastAttempt.result] : '#22c55e'
 
   return (
-    <div className="fixed top-4 right-4 w-48 bg-black/80 text-white rounded-xl p-3 backdrop-blur-sm z-50">
-      {/* Accuracy */}
-      <div className="text-center mb-3">
-        <span className="text-4xl font-bold">{score.accuracy}%</span>
-        <p className="text-xs text-gray-400">precisión</p>
+    <aside className="game-hud" aria-live="polite">
+      <div className="game-hud__topline">
+        <div>
+          <span className="game-hud__eyebrow">PUNTUACIÓN</span>
+          <strong className="game-hud__points">{score.points.toLocaleString()}</strong>
+        </div>
+        <div className="game-hud__grade" data-grade={grade}>{grade}</div>
       </div>
 
-      {/* Streak */}
-      {score.streak > 2 && (
-        <div className="text-center mb-3 text-yellow-400 font-bold">
-          🔥 x{score.streak}
+      <div className="game-hud__accuracy-row">
+        <strong>{score.accuracy}%</strong>
+        <span>precisión</span>
+        <i style={{ width: `${score.accuracy}%` }} />
+      </div>
+
+      <div className="game-hud__streak-row">
+        <span className={score.streak >= 10 ? 'is-hot' : ''}>🔥 {score.streak} racha</span>
+        <strong>x{score.multiplier}</strong>
+      </div>
+
+      {lastAttempt && (
+        <div className="game-hud__feedback" style={{ color: feedbackColor }} key={attempts.length}>
+          {RESULT_TEXT[lastAttempt.result]}
+          {lastAttempt.timeDiff > 0 && <small>{Math.round(lastAttempt.timeDiff)} ms</small>}
         </div>
       )}
-
-      {/* Breakdown */}
-      <div className="space-y-1 text-xs">
-        {HUD_ROWS.map(({ key, label }) => (
-          <div key={key} className="flex justify-between">
-            <span style={{ color: RESULT_COLORS[key] }}>{label}</span>
-            <span>{score[key]}</span>
-          </div>
-        ))}
-      </div>
-
-      {/* Song position */}
-      <div className="mt-3 pt-2 border-t border-gray-700 text-xs text-gray-400 text-center">
-        Compás {currentBar + 1} &middot; Beat {currentBeat + 1}
-      </div>
-    </div>
+    </aside>
   )
 }

@@ -2,6 +2,8 @@ import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
 import { useAlphaTab } from '../hooks/useAlphaTab'
 import { NoteOverlay } from './NoteOverlay'
 import { HitFeedback } from './HitFeedback'
+import { useGameStore } from '../store/useGameStore'
+import { GameHUD } from './GameHUD'
 
 export interface ScoreViewerHandle {
   play: () => void
@@ -12,16 +14,18 @@ export interface ScoreViewerHandle {
 
 interface ScoreViewerProps {
   file: File | string | null
+  onScroll?: () => void
 }
 
 export const ScoreViewer = forwardRef<ScoreViewerHandle, ScoreViewerProps>(
-  ({ file }, ref) => {
+  ({ file, onScroll }, ref) => {
     // scrollRef = outer container with overflow-x: auto (AlphaTab scrolls this)
     const scrollRef = useRef<HTMLDivElement>(null)
     // containerRef = AlphaTab render target
     const containerRef = useRef<HTMLDivElement>(null)
 
     const { initialize, play, pause, stop, setTempo } = useAlphaTab(containerRef, scrollRef)
+  const isMaster = useGameStore(s => s.gameMode === 'master')
 
     useImperativeHandle(ref, () => ({ play, pause, stop, setTempo }), [play, pause, stop, setTempo])
 
@@ -34,23 +38,25 @@ export const ScoreViewer = forwardRef<ScoreViewerHandle, ScoreViewerProps>(
     return (
       <div
         ref={scrollRef}
+        onScroll={onScroll}
         style={{
           flex: 1,
-          overflowX: 'auto',
-          overflowY: 'hidden',
+          minHeight: 0,        /* critical: lets flex shrink below content height */
+          overflowX: 'hidden',
+          overflowY: 'auto',
           background: '#111',
           position: 'relative',
         }}
       >
+        <GameHUD />
         {/* Inner wrapper provides positioning context for the overlay */}
         <div style={{ position: 'relative', minWidth: '100%' }}>
           {/* AlphaTab render target */}
           <div ref={containerRef} style={{ minHeight: '200px' }} />
 
-          {/* Note highlight overlay — same coordinate space as AlphaTab canvas */}
-          <NoteOverlay />
-          {/* Hit feedback particles — same coordinate space */}
-          <HitFeedback />
+          {/* Overlays and hit feedback — master mode only */}
+          {isMaster && <NoteOverlay />}
+          {isMaster && <HitFeedback />}
         </div>
 
         {/* Placeholder when no file */}

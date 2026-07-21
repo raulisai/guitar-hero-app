@@ -20,6 +20,9 @@ interface GameStore {
   isCalibrated: boolean
   noiseFloor: number      // auto-calibrated ambient RMS threshold
   waitMode: boolean       // master mode: wait indefinitely for user to play
+  micEnabled: boolean     // persisted mic preference (auto-restart on load)
+  songBpm: number
+  isMuted: boolean
 
   // Real-time notes
   expectedNote: ExpectedNote | null
@@ -50,6 +53,9 @@ interface GameStore {
   setLatencyOffset: (offset: number) => void
   setNoiseFloor: (floor: number) => void
   setWaitMode: (v: boolean) => void
+  setMicEnabled: (v: boolean) => void
+  setSongBpm: (bpm: number) => void
+  setIsMuted: (v: boolean) => void
   setCurrentBeatBounds: (bounds: BeatBounds | null) => void
   setCurrentTabBounds: (bounds: BeatBounds | null) => void
   markCurrentBeatFailed: () => void
@@ -70,6 +76,26 @@ const initialScore: Score = {
   streak: 0,
   maxStreak: 0,
   accuracy: 0,
+  points: 0,
+  multiplier: 1,
+}
+
+const RESULT_WEIGHT: Record<NoteResult, number> = {
+  perfect: 1,
+  good: 0.8,
+  late: 0.55,
+  early: 0.55,
+  wrong: 0,
+  miss: 0,
+}
+
+const RESULT_POINTS: Record<NoteResult, number> = {
+  perfect: 1000,
+  good: 750,
+  late: 500,
+  early: 500,
+  wrong: 0,
+  miss: 0,
 }
 
 export const useGameStore = create<GameStore>()(
@@ -83,6 +109,9 @@ export const useGameStore = create<GameStore>()(
       isCalibrated: false,
       noiseFloor: 0.01,
       waitMode: false,
+      micEnabled: false,
+      songBpm: 0,
+      isMuted: false,
       expectedNote: null,
       detectedNote: null,
       currentBar: 0,
@@ -102,6 +131,9 @@ export const useGameStore = create<GameStore>()(
       setLatencyOffset: (offset) => set({ latencyOffset: offset, isCalibrated: true }),
       setNoiseFloor: (floor) => set({ noiseFloor: floor }),
       setWaitMode: (v) => set({ waitMode: v }),
+      setMicEnabled: (v) => set({ micEnabled: v }),
+      setSongBpm: (bpm) => set({ songBpm: bpm }),
+      setIsMuted: (v) => set({ isMuted: v }),
       setCurrentBeatBounds: (bounds) => set({ currentBeatBounds: bounds }),
       setCurrentTabBounds: (bounds) => set({ currentTabBounds: bounds }),
       setResumePlayback: (fn) => set({ resumePlayback: fn }),
@@ -133,12 +165,18 @@ export const useGameStore = create<GameStore>()(
         let result: NoteResult
         let timeDiff = 0
 
-        if (!detectedNote || detectedNote.clarity < 0.85) {
+        if (!detectedNote || detectedNote.clarity < 0.82 || detectedNote.stableFrames < 2) {
           result = 'miss'
         } else if (gameMode === 'master') {
-          // Master mode: staleness is filtered upstream in useGameLoop subscribe.
-          // Here we only check MIDI match — no onset/timing check.
-          result = detectedNote.midi === expectedNote.midi ? 'perfect' : 'wrong'
+          const adjustedOnset = detectedNote.onset - latencyOffset
+          timeDiff = Math.max(0, adjustedOnset - expectedNote.timestamp)
+          const matches = expectedNote.chordMidis?.includes(detectedNote.midi)
+            ?? detectedNote.midi === expectedNote.midi
+
+          if (!matches) result = 'wrong'
+          else if (timeDiff <= 350) result = 'perfect'
+          else if (timeDiff <= 700) result = 'good'
+          else result = 'late'
         } else if (detectedNote.onset < expectedNote.timestamp - 300) {
           // Reproduction mode: note onset predates this beat — string was ringing before beat fired
           result = 'miss'
@@ -147,7 +185,8 @@ export const useGameStore = create<GameStore>()(
           const adjustedDetectedTime = detectedNote.timestamp - latencyOffset
           timeDiff = adjustedDetectedTime - expectedNote.timestamp
 
-          const noteMatch = detectedNote.midi === expectedNote.midi
+          const noteMatch = expectedNote.chordMidis?.includes(detectedNote.midi)
+            ?? detectedNote.midi === expectedNote.midi
 
           if (!noteMatch) {
             result = 'wrong'
@@ -172,22 +211,29 @@ export const useGameStore = create<GameStore>()(
         const isHit = ['perfect', 'good', 'late', 'early'].includes(result)
         const newStreak = isHit ? score.streak + 1 : 0
         const newMaxStreak = Math.max(score.maxStreak, newStreak)
+        const multiplier = Math.min(4, 1 + Math.floor(newStreak / 10))
 
         const newScore: Score = {
           ...score,
           [result]: (score[result as keyof Score] as number) + 1,
           streak: newStreak,
           maxStreak: newMaxStreak,
+          multiplier,
+          points: score.points + RESULT_POINTS[result] * (isHit ? multiplier : 1),
         }
 
         const total =
           newScore.perfect + newScore.good + newScore.late +
           newScore.early + newScore.wrong + newScore.miss
-        const hits = newScore.perfect + newScore.good + newScore.late + newScore.early
-        newScore.accuracy = total > 0 ? Math.round((hits / total) * 100) : 0
+        const weightedHits =
+          newScore.perfect * RESULT_WEIGHT.perfect +
+          newScore.good * RESULT_WEIGHT.good +
+          newScore.late * RESULT_WEIGHT.late +
+          newScore.early * RESULT_WEIGHT.early
+        newScore.accuracy = total > 0 ? Math.round((weightedHits / total) * 100) : 0
 
         set((state) => ({
-          attempts: [...state.attempts, attempt],
+          attempts: [...state.attempts.slice(-499), attempt],
           score: newScore,
         }))
       },
@@ -213,6 +259,7 @@ export const useGameStore = create<GameStore>()(
         latencyOffset: state.latencyOffset,
         isCalibrated: state.isCalibrated,
         noiseFloor: state.noiseFloor,
+        micEnabled: state.micEnabled,
       }),
     }
   )
