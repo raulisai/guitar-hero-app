@@ -615,94 +615,99 @@ body:has(.game-app) {
 @media (max-width: 760px) {
   .game-app { width:100vw; min-width:0; }
   .game-topbar {
-    grid-template-columns:40px minmax(0,1fr) 54px 40px;
-    gap:6px;
+    grid-template-columns:36px minmax(0,1fr) 48px 36px;
+    gap:5px;
     width:100%;
-    height:62px;
-    padding:8px;
+    height:54px;
+    padding:6px 8px;
   }
-  .topbar-icon-button,.song-search-trigger,.streak-button { height:42px; border-color:rgba(143,163,194,.12); background:rgba(5,9,15,.62); }
+  .topbar-icon-button,.song-search-trigger,.streak-button { height:36px; border-color:rgba(143,163,194,.1); background:rgba(5,9,15,.58); }
   .topbar-icon-button,.song-search-trigger,.streak-button { width:100%; min-width:0; max-width:100%; overflow:hidden; }
-  .topbar-icon-button { border-radius:14px; }
-  .song-search-trigger { padding:0 10px; border-radius:16px; }
-  .streak-button { border-radius:14px; }
+  .topbar-icon-button { border-radius:12px; }
+  .topbar-icon-button svg { width:19px; height:19px; }
+  .song-search-trigger { padding:0 9px; border-radius:14px; }
+  .song-search-trigger span { font-size:10px; }
+  .streak-button { border-radius:12px; }
+  .streak-flame svg { width:16px; height:16px; }
+  .streak-button strong { font-size:12px; }
 
   .game-screen {
     width:100%;
     max-width:100vw;
-    height:calc(100svh - 62px);
-    padding:5px 8px calc(136px + env(safe-area-inset-bottom));
+    height:calc(100svh - 54px);
+    padding:4px 8px calc(128px + env(safe-area-inset-bottom));
     overflow-x:hidden;
     touch-action:pan-y;
   }
   .game-card { max-width:100%; border-color:rgba(143,163,194,.105); border-radius:14px; box-shadow:0 10px 28px rgba(0,0,0,.18); }
-  .game-card + .game-card { margin-top:8px; }
+  .game-card + .game-card { margin-top:7px; }
 
   .song-overview {
-    min-height:96px;
-    grid-template-columns:16% minmax(0,56%) minmax(0,28%);
+    min-height:76px;
+    grid-template-columns:13% minmax(0,59%) minmax(0,28%);
     gap:0;
-    padding:9px;
+    padding:7px;
   }
-  .song-cover-wrap { width:58px; height:58px; }
-  .song-cover { border-radius:9px; }
-  .song-overview__copy { min-width:0; padding:0 8px; }
-  .song-overview__copy h1 { max-width:100%; font-size:16px; }
-  .song-overview__copy > p { margin:3px 0 7px; font-size:11px; }
-  .song-meta { gap:5px; font-size:7px; }
+  .song-cover-wrap { width:44px; height:44px; }
+  .song-cover { border-radius:8px; }
+  .song-overview__copy { min-width:0; padding:0 7px; }
+  .song-overview__copy h1 { max-width:100%; font-size:14px; }
+  .song-overview__copy > p { margin:2px 0 5px; font-size:9px; }
+  .song-meta { gap:4px; font-size:6px; }
   .song-meta span:first-child { flex-basis:auto; }
-  .song-objective { width:100%; min-width:0; min-height:72px; padding:8px 4px; border-color:rgba(125,148,190,.22); border-radius:13px; background:rgba(18,25,38,.48); overflow:hidden; }
-  .song-objective > span { font-size:7px; }
-  .song-objective > strong { margin:3px 0; font-size:25px; }
-  .song-objective > small { font-size:7px; line-height:1.25; }
+  .song-objective { width:100%; min-width:0; min-height:58px; padding:6px 3px; border-color:rgba(125,148,190,.16); border-radius:11px; background:rgba(18,25,38,.38); overflow:hidden; }
+  .song-objective > span { font-size:6px; }
+  .song-objective > strong { margin:2px 0; font-size:20px; }
+  .song-objective > small { font-size:6px; line-height:1.2; }
 
   .note-coach {
-    min-height:94px;
-    grid-template-columns:15% 18% 29% 38%;
-    padding:7px 6px;
+    min-height:70px;
+    grid-template-columns:12% 18% 30% 40%;
+    padding:5px 6px;
   }
   .note-coach > div { min-width:0; overflow:hidden; }
-  .note-coach > div:not(:last-child) { min-height:68px; border-right-color:rgba(130,150,180,.07); }
-  .note-coach__image img { width:50px; height:68px; }
-  .note-coach__note { padding-left:8px; }
-  .note-coach__note span { font-size:8px; }
-  .note-coach__note strong { font-size:32px; }
-  .note-coach__position { gap:2px; padding-left:9px; font-size:7.5px; }
-  .finger-chip { margin-top:2px; padding:3px 6px; font-size:6px; }
-  .note-coach__tip { gap:5px; padding-left:9px; }
-  .note-coach__tip strong { padding:4px 6px; font-size:7px; }
-  .note-coach__tip svg { width:11px; height:11px; }
-  .note-coach__tip span { font-size:6.5px; line-height:1.35; }
+  .note-coach > div:not(:last-child) { min-height:50px; border-right-color:rgba(130,150,180,.055); }
+  .note-coach__image img { width:36px; height:50px; }
+  .note-coach__note { padding-left:7px; }
+  .note-coach__note span { font-size:7px; }
+  .note-coach__note strong { font-size:24px; }
+  .note-coach__position { gap:1px; padding-left:8px; font-size:6.5px; }
+  .finger-chip { margin-top:2px; padding:2px 5px; font-size:5.5px; }
+  .note-coach__tip { gap:4px; padding-left:8px; }
+  .note-coach__tip strong { padding:3px 6px; font-size:6px; }
+  .note-coach__tip svg { width:9px; height:9px; }
+  .note-coach__tip span { font-size:5.8px; line-height:1.3; }
 
-  .guitar-highway { min-height:316px; padding:38px 8px 7px; }
+  .guitar-highway { min-height:274px; padding:32px 8px 6px; }
   .guitar-highway::before { opacity:.15; }
-  .highway-callout { top:6px; left:15%; font-size:10px; }
-  .highway-grid { inset:27px 8px 43px 43px; }
-  .highway-playhead { top:31px; bottom:45px; width:26px; border-color:rgba(230,201,255,.64); }
+  .highway-callout { top:5px; left:15%; font-size:9px; }
+  .highway-grid { inset:23px 8px 37px 39px; }
+  .highway-playhead { top:27px; bottom:39px; width:22px; border-color:rgba(230,201,255,.58); }
   .highway-playhead::before { inset:-8px -12px; }
-  .highway-playhead > span { width:10px; height:10px; }
-  .highway-lane { height:36px; }
-  .highway-string-label { width:27px; height:27px; border-width:1.5px; font-size:14px; }
-  .highway-string-line { left:35px; height:1px; }
-  .highway-string-line i { width:5px; height:5px; }
-  .highway-note-rail { height:29px; transition:left 42ms linear, opacity .16s ease; }
-  .highway-note-head { width:48px; height:29px; }
-  .highway-note-head b { font-size:13px; }
-  .highway-note-tail { height:9px; }
-  .highway-ruler { grid-template-columns:52px repeat(4,1fr); height:40px; }
-  .highway-ruler > span { font-size:6.5px; }
-  .highway-ruler strong { padding:0 5px; font-size:12px; }
+  .highway-playhead > span { width:8px; height:8px; }
+  .highway-lane { height:31px; }
+  .highway-string-label { width:23px; height:23px; border-width:1.25px; font-size:12px; }
+  .highway-string-line { left:31px; height:1px; }
+  .highway-string-line i { width:4px; height:4px; }
+  .highway-note-rail { height:24px; transition:left 42ms linear, opacity .16s ease; }
+  .highway-note-head { width:39px; height:24px; }
+  .highway-note-head b { font-size:10.5px; }
+  .highway-note-tail { height:7px; }
+  .highway-ruler { grid-template-columns:47px repeat(4,1fr); height:34px; }
+  .highway-ruler > span { font-size:5.8px; }
+  .highway-ruler strong { padding:0 5px; font-size:10px; }
   .highway-ruler strong::before { top:-7px; width:4px; height:4px; }
-  .highway-ruler strong small { font-size:7px; }
-  .highway-loading { inset:38px 10px 43px 42px; font-size:8px; }
+  .highway-ruler strong small { font-size:6px; }
+  .highway-loading { inset:32px 10px 37px 38px; font-size:7px; }
 
-  .notation-card,.notation-card .score-viewer { height:158px; min-height:158px; }
-  .notation-card .score-scroll { padding-top:17px; }
-  .notation-card .score-canvas { min-width:600px; transform:scale(.76); width:131.6%; }
-  .notation-card .alphatab-target { min-height:170px; }
+  .notation-card,.notation-card .score-viewer { height:210px; min-height:210px; }
+  .notation-card .score-scroll { padding-top:19px; }
+  .notation-card .score-canvas { min-width:520px; transform:scale(.86); width:116.3%; }
+  .notation-card .alphatab-target { min-height:210px; }
+  .notation-card .score-empty { height:190px; min-height:190px; }
   .notation-card > header { top:6px; left:10px; right:10px; }
 
-  .beat-status { min-height:44px; grid-template-columns:1fr 1.1fr; gap:5px; padding:7px 10px; }
+  .beat-status { min-height:38px; grid-template-columns:1fr 1.1fr; gap:5px; padding:6px 10px; }
   .beat-pulse { gap:12px; }
 
   .control-deck {
@@ -746,22 +751,40 @@ body:has(.game-app) {
 }
 
 @media (max-width: 430px) {
-  .game-topbar { grid-template-columns:36px minmax(0,1fr) 46px 36px; gap:5px; padding:7px 6px; }
-  .topbar-icon-button,.song-search-trigger,.streak-button { height:40px; }
-  .song-search-trigger span { font-size:9px; }
+  .game-topbar { grid-template-columns:34px minmax(0,1fr) 43px 34px; gap:4px; height:50px; padding:5px 6px; }
+  .topbar-icon-button,.song-search-trigger,.streak-button { height:34px; }
+  .song-search-trigger span { font-size:8.5px; }
   .streak-button small { display:none; }
-  .song-overview { grid-template-columns:15% minmax(0,57%) minmax(0,28%); gap:0; padding:7px; }
-  .song-cover-wrap { width:52px; height:52px; }
-  .song-overview__copy h1 { font-size:14px; }
-  .song-overview__copy > p { font-size:9px; }
-  .song-meta { font-size:6.5px; }
-  .song-objective > strong { font-size:22px; }
-  .note-coach { grid-template-columns:14% 18% 30% 38%; padding:6px 4px; }
-  .note-coach__image img { width:43px; }
+  .game-screen { height:calc(100svh - 50px); padding-top:3px; }
+  .song-overview { min-height:68px; grid-template-columns:12% minmax(0,60%) minmax(0,28%); gap:0; padding:6px; }
+  .song-cover-wrap { width:38px; height:38px; }
+  .song-overview__copy { padding:0 6px; }
+  .song-overview__copy h1 { font-size:12.5px; }
+  .song-overview__copy > p { font-size:8px; }
+  .song-meta { font-size:5.5px; }
+  .song-objective { min-height:52px; }
+  .song-objective > strong { font-size:18px; }
+  .note-coach { min-height:62px; grid-template-columns:12% 18% 30% 40%; padding:4px; }
+  .note-coach > div:not(:last-child) { min-height:44px; }
+  .note-coach__image img { width:31px; height:44px; }
   .note-coach__note { padding-left:6px; }
-  .note-coach__note strong { font-size:28px; }
+  .note-coach__note strong { font-size:21px; }
   .note-coach__position,.note-coach__tip { padding-left:6px; }
-  .note-coach__tip span { font-size:5.8px; }
+  .note-coach__tip span { font-size:5.2px; }
+  .guitar-highway { min-height:252px; padding-top:29px; }
+  .highway-grid { top:21px; }
+  .highway-playhead { top:24px; bottom:36px; width:20px; }
+  .highway-lane { height:28px; }
+  .highway-string-label { width:21px; height:21px; font-size:11px; }
+  .highway-string-line { left:28px; }
+  .highway-note-rail { height:21px; }
+  .highway-note-head { width:34px; height:21px; }
+  .highway-note-head b { font-size:9px; }
+  .highway-note-tail { height:6px; }
+  .highway-ruler { height:32px; }
+  .notation-card,.notation-card .score-viewer { height:196px; min-height:196px; }
+  .notation-card .score-canvas { min-width:400px; transform:scale(.84); width:119.05%; }
+  .notation-card .alphatab-target { min-height:200px; }
   .control-deck__main { grid-template-columns:18% 18% 20% 24% 14% 6%; gap:0; padding:6px; }
   .control-toggle > svg,.repeat-control > svg { display:block; }
   .control-toggle > span { align-items:center; }
