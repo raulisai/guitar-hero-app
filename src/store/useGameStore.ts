@@ -73,7 +73,7 @@ export const useGameStore = create<GameStore>()(
   persist(
     (set, get) => ({
       gameState: 'idle',
-      gameMode: 'master',
+      gameMode: 'reproduction',
       currentSongFile: null,
       songDuration: 0,
       latencyOffset: 0,

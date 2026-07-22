@@ -3,8 +3,6 @@ import { useAlphaTab } from '../hooks/useAlphaTab'
 import { NoteOverlay } from './NoteOverlay'
 import { HitFeedback } from './HitFeedback'
 import { useGameStore } from '../store/useGameStore'
-import { GameHUD } from './GameHUD'
-import { NoteValidator } from './NoteValidator'
 
 export interface ScoreViewerHandle {
   play: () => void
@@ -16,21 +14,17 @@ export interface ScoreViewerHandle {
 interface ScoreViewerProps {
   file: File | string | null
   onScroll?: () => void
-  isListening: boolean
-  isRequesting: boolean
-  micError: string | null
-  onToggleMic: () => void
 }
 
 export const ScoreViewer = forwardRef<ScoreViewerHandle, ScoreViewerProps>(
-  ({ file, onScroll, isListening, isRequesting, micError, onToggleMic }, ref) => {
+  ({ file, onScroll }, ref) => {
     // scrollRef = outer container with overflow-x: auto (AlphaTab scrolls this)
     const scrollRef = useRef<HTMLDivElement>(null)
     // containerRef = AlphaTab render target
     const containerRef = useRef<HTMLDivElement>(null)
 
     const { initialize, play, pause, stop, setTempo } = useAlphaTab(containerRef, scrollRef)
-  const isMaster = useGameStore(s => s.gameMode === 'master')
+    const isMaster = useGameStore(s => s.gameMode === 'master')
 
     useImperativeHandle(ref, () => ({ play, pause, stop, setTempo }), [play, pause, stop, setTempo])
 
@@ -44,15 +38,7 @@ export const ScoreViewer = forwardRef<ScoreViewerHandle, ScoreViewerProps>(
       <div
         className="score-viewer"
       >
-        <NoteValidator
-          isListening={isListening}
-          isRequesting={isRequesting}
-          error={micError}
-          onToggleMic={onToggleMic}
-        />
-
         <div ref={scrollRef} onScroll={onScroll} className="score-scroll">
-          <GameHUD />
           {/* Inner wrapper provides positioning context for the overlay */}
           <div className="score-canvas">
             {/* AlphaTab render target */}
@@ -72,7 +58,7 @@ export const ScoreViewer = forwardRef<ScoreViewerHandle, ScoreViewerProps>(
               <p>Carga un archivo .gp5 para comenzar</p>
             </div>
           )}
-          </div>
+        </div>
       </div>
     )
   }

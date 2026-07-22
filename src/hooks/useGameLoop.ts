@@ -77,6 +77,9 @@ export function useGameLoop() {
     if (gameMode !== 'master') return
     if (gameState !== 'paused') return
     if (!expectedNote) return
+    // En “Esperar nota” no existe un reloj oculto: el beat permanece activo
+    // hasta recibir un ataque nuevo y correcto o hasta que el usuario pause.
+    if (waitMode) return
     const beatKey = `${expectedNote.bar}-${expectedNote.beat}`
     if (beatKey === lastEvaluatedKey.current) return
 
@@ -94,7 +97,7 @@ export function useGameLoop() {
         state.markCurrentBeatFailed()
       }
       setTimeout(() => useGameStore.getState().advanceLesson?.(), 80)
-    }, getMasterTimeout(waitMode))
+    }, getMasterTimeout(false))
 
     masterTimeoutRef.current = timeout
 

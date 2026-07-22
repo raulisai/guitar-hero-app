@@ -301,7 +301,12 @@ export function useAudioDetection() {
   const stopListening = useCallback(() => {
     cancelAnimationFrame(animFrameRef.current)
     streamRef.current?.getTracks().forEach((t) => t.stop())
-    audioContextRef.current?.close()
+    streamRef.current = null
+    const audioContext = audioContextRef.current
+    audioContextRef.current = null
+    if (audioContext && audioContext.state !== 'closed') {
+      void audioContext.close().catch(() => { /* Cierre idempotente durante recargas y StrictMode. */ })
+    }
     analyserRef.current = null
     prevMidiRef.current = null
     lastKnownMidiRef.current = null

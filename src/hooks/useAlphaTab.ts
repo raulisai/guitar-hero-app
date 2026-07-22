@@ -30,6 +30,7 @@ type LessonBeatLookup = alphaTab.midi.MidiTickLookupFindBeatResult
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function buildSettings(scrollElement: HTMLElement | null): any {
+  const isNarrowScreen = window.innerWidth <= 760
   return {
     core: {
       fontDirectory: '/font/',
@@ -38,6 +39,9 @@ function buildSettings(scrollElement: HTMLElement | null): any {
     display: {
       layoutMode: 'page',
       staveProfile: 'scoreTab',
+      scale: isNarrowScreen ? 0.72 : 0.88,
+      stretchForce: isNarrowScreen ? 0.72 : 0.9,
+      barsPerRow: isNarrowScreen ? 2 : -1,
       resources: {
         staffLineColor: '#666666',
         barSeparatorColor: '#444444',
@@ -45,6 +49,21 @@ function buildSettings(scrollElement: HTMLElement | null): any {
         mainGlyphColor: '#e5e5e5',
         secondaryGlyphColor: '#aaaaaa',
         scoreInfoColor: '#cccccc',
+      },
+    },
+    notation: {
+      elements: {
+        scoreTitle: false,
+        scoreSubTitle: false,
+        scoreArtist: false,
+        scoreAlbum: false,
+        scoreWords: false,
+        scoreMusic: false,
+        scoreWordsAndMusic: false,
+        scoreCopyright: false,
+        guitarTuning: false,
+        trackNames: false,
+        chordDiagrams: false,
       },
     },
     player: {

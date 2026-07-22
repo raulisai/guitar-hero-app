@@ -1,55 +1,73 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { ScoreViewer, type ScoreViewerHandle } from './components/ScoreViewer'
-import { Calibration } from './components/Calibration'
-import { FloatingBar } from './components/FloatingBar'
-import type { PanelView } from './components/FloatingBar'
-import { DebugLog } from './components/DebugLog'
 import { AdminDashboard, type RepositoryFile } from './components/AdminDashboard'
-import { useGameLoop } from './hooks/useGameLoop'
-import { useGameStore } from './store/useGameStore'
-import { useMetronome } from './hooks/useMetronome'
-import { useAudioDetection } from './hooks/useAudioDetection'
-import { useAutoHide } from './hooks/useAutoHide'
+import { Calibration } from './components/Calibration'
+import { CameraCoach } from './components/CameraCoach'
+import { DebugLog } from './components/DebugLog'
+import { GameControlDeck } from './components/GameControlDeck'
+import { GameTopBar } from './components/GameTopBar'
+import { GuitarHighway } from './components/GuitarHighway'
+import { ScoreViewer, type ScoreViewerHandle } from './components/ScoreViewer'
+import { SongCoach } from './components/SongCoach'
 import { ALL_SONGS, DEFAULT_DEMO, type DemoSong } from './demoSongs'
+import { useAudioDetection } from './hooks/useAudioDetection'
+import { useGameLoop } from './hooks/useGameLoop'
+import { useMetronome } from './hooks/useMetronome'
+import { useGameStore } from './store/useGameStore'
 import type { GameMode } from './types'
+import './game-ui.css'
 
 type CalibrationTab = 'tuner' | 'latency'
 
+const sleep = (milliseconds: number) => new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds))
+
 export default function App() {
   const [songFile, setSongFile] = useState<File | string | null>(DEFAULT_DEMO.tex)
-  const [songTitle, setSongTitle] = useState<string>(
-    `${DEFAULT_DEMO.title} — ${DEFAULT_DEMO.artist}`
-  )
+  const [selectedSong, setSelectedSong] = useState<DemoSong>(DEFAULT_DEMO)
+  const [syncedSongs, setSyncedSongs] = useState<DemoSong[]>([])
+  const [activeSection, setActiveSection] = useState<'game' | 'admin'>('game')
   const [showCalibration, setShowCalibration] = useState(false)
   const [calibrationTab, setCalibrationTab] = useState<CalibrationTab>('tuner')
-  const [showDemoMenu, setShowDemoMenu] = useState(false)
+  const [showCamera, setShowCamera] = useState(false)
   const [showDebugLog, setShowDebugLog] = useState(false)
-  const [panelOpen, setPanelOpen] = useState(() =>
-    typeof window === 'undefined' || (window.innerWidth > 900 && window.innerHeight > 520)
-  )
-  const [panelView, setPanelView] = useState<PanelView>('fretboard')
-  const [tempo, setTempoState] = useState(100)
+  const [tempo, setTempo] = useState(100)
   const [isLooping, setIsLooping] = useState(false)
-  const [isMetronome, setIsMetronome] = useState(false)
-  const [activeSection, setActiveSection] = useState<'game' | 'admin'>('game')
-  const [syncedSongs, setSyncedSongs] = useState<DemoSong[]>([])
+  const [isMetronome, setIsMetronome] = useState(true)
+  const [countdown, setCountdown] = useState<string | null>(null)
+  const [hasStarted, setHasStarted] = useState(false)
+  const countdownTokenRef = useRef(0)
   const scoreRef = useRef<ScoreViewerHandle>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const { isCalibrated, gameMode, gameState, setGameMode, resetGame, fadeFailed, songBpm, micEnabled, setMicEnabled } = useGameStore(useShallow((state) => ({
+
+  const {
+    isCalibrated,
+    gameMode,
+    gameState,
+    expectedNote,
+    currentBar,
+    songBpm,
+    micEnabled,
+    setMicEnabled,
+    setGameMode,
+    setWaitMode,
+    setGameState,
+    resetGame,
+    fadeFailed,
+  } = useGameStore(useShallow((state) => ({
     isCalibrated: state.isCalibrated,
     gameMode: state.gameMode,
     gameState: state.gameState,
-    setGameMode: state.setGameMode,
-    resetGame: state.resetGame,
-    fadeFailed: state.fadeFailed,
+    expectedNote: state.expectedNote,
+    currentBar: state.currentBar,
     songBpm: state.songBpm,
     micEnabled: state.micEnabled,
     setMicEnabled: state.setMicEnabled,
+    setGameMode: state.setGameMode,
+    setWaitMode: state.setWaitMode,
+    setGameState: state.setGameState,
+    resetGame: state.resetGame,
+    fadeFailed: state.fadeFailed,
   })))
-  const { barHidden, showBar, hideNow } = useAutoHide(gameMode)
 
-  // Audio detection — lifted to App so mic button in FloatingBar and MicPill share one instance
   const {
     isListening,
     isRequesting,
@@ -63,333 +81,246 @@ export default function App() {
   useGameLoop()
   useMetronome(isMetronome, songBpm, tempo)
 
+  const availableSongs = [...ALL_SONGS, ...syncedSongs]
+  const isSessionActive = countdown !== null || gameState === 'playing' || (
+    gameMode === 'master' && gameState === 'paused' && Boolean(expectedNote)
+  )
+
   useEffect(() => {
     fetch('/repertoire/catalog.json')
       .then((response) => response.ok ? response.json() : null)
       .then((catalog: { songs?: Array<{ title: string; artist: string; file: string }> } | null) => {
-        if (catalog?.songs) {
-          setSyncedSongs(catalog.songs.map((song) => ({ title: song.title, artist: song.artist, tex: song.file })))
-        }
+        if (!catalog?.songs) return
+        setSyncedSongs(catalog.songs.map((song) => ({ title: song.title, artist: song.artist, tex: song.file })))
       })
-      .catch(() => { /* the built-in repertoire remains available offline */ })
+      .catch(() => { /* El repertorio integrado permanece disponible sin conexión. */ })
   }, [])
 
-  const availableSongs = [...ALL_SONGS, ...syncedSongs]
-
-  // Auto-start mic if user had it on in last session
   useEffect(() => {
-    if (micEnabled && !isListening && !isRequesting) {
-      startListening()
-    }
+    if (micEnabled && !isListening && !isRequesting) void startListening()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Persist mic state whenever it changes
-  useEffect(() => { setMicEnabled(isListening) }, [isListening, setMicEnabled])
+  useEffect(() => {
+    setMicEnabled(isListening)
+  }, [isListening, setMicEnabled])
+
+  useEffect(() => () => {
+    countdownTokenRef.current += 1
+    window.speechSynthesis?.cancel()
+  }, [])
+
+  const cancelCountdown = useCallback(() => {
+    countdownTokenRef.current += 1
+    setCountdown(null)
+    window.speechSynthesis?.cancel()
+  }, [])
+
+  const speak = useCallback((message: string) => {
+    if (!('speechSynthesis' in window)) return
+    window.speechSynthesis.cancel()
+    const utterance = new SpeechSynthesisUtterance(message)
+    utterance.lang = 'es-MX'
+    utterance.rate = 1.05
+    utterance.pitch = 1.08
+    window.speechSynthesis.speak(utterance)
+  }, [])
+
+  const startWithCountdown = useCallback(async () => {
+    const token = ++countdownTokenRef.current
+    fadeFailed()
+
+    if (!isListening && !isRequesting) await startListening()
+    if (token !== countdownTokenRef.current) return
+
+    if (hasStarted && gameMode === 'reproduction' && gameState === 'paused') {
+      scoreRef.current?.play()
+      return
+    }
+
+    setGameState('countdown')
+    const effectiveBpm = Math.max(60, (songBpm || 112) * tempo / 100)
+    const countDuration = Math.max(430, Math.min(820, 60_000 / effectiveBpm))
+
+    for (const step of ['3', '2', '1']) {
+      if (token !== countdownTokenRef.current) return
+      setCountdown(step)
+      speak(step === '3' ? 'tres' : step === '2' ? 'dos' : 'uno')
+      await sleep(countDuration)
+    }
+
+    if (token !== countdownTokenRef.current) return
+    setCountdown('¡TOCA!')
+    speak('toca')
+    await sleep(Math.min(360, countDuration * 0.55))
+    if (token !== countdownTokenRef.current) return
+
+    setCountdown(null)
+    setHasStarted(true)
+    scoreRef.current?.play()
+  }, [fadeFailed, gameMode, gameState, hasStarted, isListening, isRequesting, setGameState, songBpm, speak, startListening, tempo])
+
+  const handlePause = useCallback(() => {
+    cancelCountdown()
+    scoreRef.current?.pause()
+    if (gameMode === 'master') setGameState('idle')
+  }, [cancelCountdown, gameMode, setGameState])
+
+  const handleReset = useCallback(() => {
+    cancelCountdown()
+    scoreRef.current?.stop()
+    resetGame()
+    setHasStarted(false)
+  }, [cancelCountdown, resetGame])
+
+  useEffect(() => {
+    if (gameState !== 'finished' || !isLooping) return
+    const timeout = window.setTimeout(() => {
+      setHasStarted(false)
+      void startWithCountdown()
+    }, 650)
+    return () => window.clearTimeout(timeout)
+  }, [gameState, isLooping, startWithCountdown])
 
   const handleToggleMic = useCallback(() => {
     if (isListening) stopListening()
-    else startListening()
+    else void startListening()
   }, [isListening, startListening, stopListening])
 
-  // When panel closes, show the bar so the bubble is reachable to reopen
-  useEffect(() => {
-    if (!panelOpen) showBar()
-  }, [panelOpen]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Loop: restart when song finishes
-  useEffect(() => {
-    if (gameState === 'finished' && isLooping) {
-      setTimeout(() => scoreRef.current?.play(), 300)
-    }
-  }, [gameState, isLooping])
-
-  const loadDemo = useCallback((song: DemoSong) => {
+  const loadSong = useCallback((song: DemoSong) => {
+    handleReset()
+    setSelectedSong(song)
     setSongFile(song.tex)
-    setSongTitle(`${song.title} — ${song.artist}`)
-    setShowDemoMenu(false)
-    resetGame()
-  }, [resetGame])
+    setActiveSection('game')
+  }, [handleReset])
 
-  const handleModeChange = useCallback((mode: GameMode) => {
+  const handleModeChange = useCallback((mode: GameMode, wait: boolean) => {
+    handleReset()
     setGameMode(mode)
-    resetGame()
-    scoreRef.current?.stop()
-  }, [setGameMode, resetGame])
+    setWaitMode(wait)
+  }, [handleReset, setGameMode, setWaitMode])
 
-  const handleFileUpload = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0]
-      if (file) {
-        setSongFile(file)
-        setSongTitle(file.name.replace(/\.[^.]+$/, ''))
-        if (!isCalibrated) setShowCalibration(true)
-      }
-    },
-    [isCalibrated]
-  )
+  const handleTempoChange = useCallback((value: number) => {
+    setTempo(value)
+    scoreRef.current?.setTempo(value / 100)
+  }, [])
 
-  const handleReset = useCallback(() => {
-    scoreRef.current?.stop()
-    resetGame()
-  }, [resetGame])
-
-  const handlePlay = useCallback(async () => {
-    fadeFailed()
-    if (gameMode === 'master' && !isListening && !isRequesting) {
-      await startListening()
+  const handleFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    handleReset()
+    const title = file.name.replace(/\.[^.]+$/, '')
+    setSongFile(file)
+    setSelectedSong({ title, artist: 'Mi biblioteca', tex: title })
+    setActiveSection('game')
+    event.target.value = ''
+    if (!isCalibrated) {
+      setCalibrationTab('latency')
+      setShowCalibration(true)
     }
-    scoreRef.current?.play()
-  }, [fadeFailed, gameMode, isListening, isRequesting, startListening])
+  }, [handleReset, isCalibrated])
 
   const handleRepositorySong = useCallback(async (entry: RepositoryFile) => {
     const response = await fetch(entry.downloadUrl)
     if (!response.ok) throw new Error(`descarga HTTP ${response.status}`)
     const buffer = await response.arrayBuffer()
     const file = new File([buffer], entry.name, { type: 'application/octet-stream' })
+    handleReset()
+    const title = entry.name.replace(/\.[^.]+$/, '')
     setSongFile(file)
-    setSongTitle(entry.name.replace(/\.[^.]+$/, ''))
+    setSelectedSong({ title, artist: entry.repository, tex: title })
     setActiveSection('game')
-    resetGame()
-  }, [resetGame])
+  }, [handleReset])
+
+  if (activeSection === 'admin') {
+    return (
+      <div className="admin-app-shell">
+        <button className="admin-return-button" type="button" onClick={() => setActiveSection('game')}>← Volver al juego</button>
+        <AdminDashboard onLoadSong={handleRepositorySong} />
+      </div>
+    )
+  }
 
   return (
-    <div className="flex flex-col" style={{ height: '100svh', background: '#111' }}>
-      {/* ── Header ─────────────────────────────────────── */}
-      <header
-        className="app-header flex items-center justify-between px-5 shrink-0"
-        style={{ height: '44px', background: '#111', borderBottom: '1px solid #1e1e1e' }}
-      >
-        {/* Left: Logo */}
-        <div className="flex items-center shrink-0">
-          <span className="font-bold" style={{ color: '#22c55e', fontSize: '15px', letterSpacing: '-0.3px' }}>
-            GuitarrStudio
-          </span>
-        </div>
+    <div className="game-app">
+      <div className="game-ambient game-ambient--violet" aria-hidden="true" />
+      <div className="game-ambient game-ambient--cyan" aria-hidden="true" />
 
-        {/* Center: Song search bar */}
-        <div className="app-song-picker flex-1 flex justify-center px-6" style={{ maxWidth: 480 }}>
-          <div className="relative w-full">
-            <button
-              onClick={() => { setActiveSection('game'); setShowDemoMenu((v) => !v) }}
-              style={{
-                width: '100%',
-                height: 30,
-                background: '#1a1a1a',
-                border: '1px solid #2a2a2a',
-                borderRadius: 8,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '0 10px',
-                cursor: 'pointer',
-                color: '#aaa',
-                fontSize: 12,
-                textAlign: 'left',
-                overflow: 'hidden',
-              }}
-            >
-              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="#555" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-              </svg>
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
-                {activeSection === 'admin' ? 'Panel admin · repertorio' : songTitle}
-              </span>
-              <span style={{ color: '#444', fontSize: 10, flexShrink: 0 }}>▾</span>
-            </button>
+      <GameTopBar
+        song={selectedSong}
+        songs={availableSongs}
+        onSelectSong={loadSong}
+        onOpenAdmin={() => setActiveSection('admin')}
+        onOpenCalibration={(tab) => { setCalibrationTab(tab); setShowCalibration(true) }}
+        onOpenCamera={() => setShowCamera(true)}
+        onToggleDebug={() => setShowDebugLog((visible) => !visible)}
+        onUpload={handleFileUpload}
+      />
 
-            {showDemoMenu && (
-              <div
-                className="absolute top-full mt-1 rounded-lg z-50"
-                style={{
-                  background: '#1a1a1a',
-                  border: '1px solid #333',
-                  minWidth: '220px',
-                  left: 0,
-                  boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
-                  maxHeight: '70vh',
-                  overflowY: 'auto',
-                }}
-              >
-                {/* Group by artist */}
-                {[...new Set(availableSongs.map(s => s.artist))].map((artist) => (
-                  <div key={artist}>
-                    <div style={{ padding: '6px 14px 2px', fontSize: 9, color: '#444', letterSpacing: '0.08em', fontWeight: 700, textTransform: 'uppercase', borderTop: '1px solid #222' }}>
-                      {artist}
-                    </div>
-                    {availableSongs.filter(s => s.artist === artist).map((song) => (
-                      <button
-                        key={song.title}
-                        onClick={() => loadDemo(song)}
-                        className="w-full text-left px-4 py-2 text-sm transition-colors"
-                        style={{ color: '#ccc', background: 'transparent' }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.background = '#252525'
-                          e.currentTarget.style.color = '#fff'
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.background = 'transparent'
-                          e.currentTarget.style.color = '#ccc'
-                        }}
-                      >
-                        {song.title}
-                      </button>
-                    ))}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+      <main className="game-screen">
+        <SongCoach song={selectedSong} />
+        <GuitarHighway song={selectedSong} />
 
-        {/* Right: action buttons */}
-        <div className="app-header-actions flex items-center gap-2 shrink-0">
-          <button
-            onClick={() => { setActiveSection((section) => section === 'admin' ? 'game' : 'admin'); setShowDemoMenu(false) }}
-            className="admin-nav-button text-xs px-3 py-1.5 rounded transition-colors"
-            style={{ background: activeSection === 'admin' ? '#22c55e' : '#22c55e15', color: activeSection === 'admin' ? '#061008' : '#22c55e', border: '1px solid #22c55e44', fontWeight: 700 }}
-          >
-            {activeSection === 'admin' ? 'Volver al juego' : 'Admin'}
-          </button>
-          {/* Demos button */}
-          <button
-            onClick={() => setShowDemoMenu((v) => !v)}
-            className="text-xs px-3 py-1.5 rounded transition-colors"
-            style={{ background: '#1e1e1e', color: '#aaa', border: '1px solid #2e2e2e' }}
-            onMouseEnter={(e) => (e.currentTarget.style.color = '#fff')}
-            onMouseLeave={(e) => (e.currentTarget.style.color = '#aaa')}
-          >
-            Demos
-          </button>
+        <section className="notation-card game-card">
+          <header>
+            <span>PARTITURA EN VIVO</span>
+            <strong>Compás {currentBar + 1}</strong>
+          </header>
+          <ScoreViewer ref={scoreRef} file={songFile} />
+        </section>
 
-          {/* Calibrar */}
-          <button
-            onClick={() => { setCalibrationTab('latency'); setShowCalibration(true) }}
-            className="text-xs px-2.5 py-1.5 rounded transition-colors"
-            style={{ color: '#666', border: '1px solid #2e2e2e' }}
-            onMouseEnter={(e) => (e.currentTarget.style.color = '#ccc')}
-            onMouseLeave={(e) => (e.currentTarget.style.color = '#666')}
-          >
-            Calibrar
-          </button>
-
-          {/* Afinador */}
-          <button
-            onClick={() => { setCalibrationTab('tuner'); setShowCalibration(true) }}
-            className="text-xs px-2.5 py-1.5 rounded transition-colors"
-            style={{ color: '#666', border: '1px solid #2e2e2e' }}
-            onMouseEnter={(e) => (e.currentTarget.style.color = '#ccc')}
-            onMouseLeave={(e) => (e.currentTarget.style.color = '#666')}
-          >
-            Afinador
-          </button>
-
-          {/* Cargar .gp5 */}
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="text-xs px-2.5 py-1.5 rounded transition-colors"
-            style={{ background: '#1e1e1e', color: '#aaa', border: '1px solid #2e2e2e' }}
-            onMouseEnter={(e) => (e.currentTarget.style.color = '#fff')}
-            onMouseLeave={(e) => (e.currentTarget.style.color = '#aaa')}
-          >
-            Cargar .gp5
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".gp,.gp4,.gp5,.gpx,.gp7"
-            style={{ display: 'none' }}
-            onChange={handleFileUpload}
-          />
-
-          {isCalibrated && (
-            <span
-              className="text-xs px-2 py-0.5 rounded"
-              style={{ color: '#22c55e', background: '#22c55e18', border: '1px solid #22c55e33' }}
-            >
-              calibrado
-            </span>
-          )}
-        </div>
-      </header>
-
-      {activeSection === 'admin' ? (
-        <AdminDashboard onLoadSong={handleRepositorySong} />
-      ) : (
-      <>
-      {/* ── Score area ─────────────────────────────────── */}
-      <div
-        className={`score-stage relative ${panelOpen ? 'panel-open' : 'panel-closed'} ${barHidden ? 'dock-hidden' : 'dock-visible'} panel-${panelView}`}
-        style={{
-          flex: 1, overflow: 'hidden',
-          display: 'flex', flexDirection: 'column',
-          transition: 'padding-bottom 0.45s cubic-bezier(0.4,0,0.2,1)',
-        }}
-        onClick={() => {
-          if (showDemoMenu) setShowDemoMenu(false)
-          if (showCalibration) setShowCalibration(false)
-        }}
-      >
-        <ScoreViewer
-          ref={scoreRef}
-          file={songFile}
-          onScroll={hideNow}
+        <GameControlDeck
+          hasFile={Boolean(songFile)}
+          tempo={tempo}
+          isLooping={isLooping}
+          isMetronome={isMetronome}
           isListening={isListening}
           isRequesting={isRequesting}
-          micError={micError}
+          isSessionActive={isSessionActive}
+          onPlay={() => { void startWithCountdown() }}
+          onPause={handlePause}
+          onTempoChange={handleTempoChange}
+          onToggleLooping={() => setIsLooping((looping) => !looping)}
+          onToggleMetronome={() => setIsMetronome((enabled) => !enabled)}
           onToggleMic={handleToggleMic}
+          onModeChange={handleModeChange}
+          onOpenCamera={() => setShowCamera(true)}
+          onOpenCalibration={() => { setCalibrationTab('tuner'); setShowCalibration(true) }}
         />
+      </main>
 
-        {/* Debug log — bottom-right corner */}
-        {showDebugLog && <DebugLog onClose={() => setShowDebugLog(false)} />}
-
-        {/* Calibration panel — centered overlay */}
-        {showCalibration && (
-          <div
-            className="absolute inset-0 flex items-center justify-center"
-            style={{ background: '#000000cc', zIndex: 20 }}
-            onClick={(e) => e.target === e.currentTarget && setShowCalibration(false)}
-          >
-            <Calibration
-              onComplete={() => setShowCalibration(false)}
-              initialTab={calibrationTab}
-              isListening={isListening}
-              startListening={startListening}
-              analyserRef={analyserRef}
-              measureAmbientRms={measureAmbientRms}
-            />
-          </div>
-        )}
-      </div>
-
-      {/* ── Floating control bar (includes mic info row when active) ── */}
-      <FloatingBar
-        hasFile={!!songFile}
-        tempo={tempo}
-        onPlay={() => { void handlePlay() }}
-        onPause={() => scoreRef.current?.pause()}
-        onStop={() => scoreRef.current?.stop()}
-        onTempoChange={(r) => scoreRef.current?.setTempo(r)}
-        onTempoInput={setTempoState}
-        showDebugLog={showDebugLog}
-        onToggleDebugLog={() => setShowDebugLog((v) => !v)}
-        isLooping={isLooping}
-        onToggleLooping={() => setIsLooping((v) => !v)}
-        isMetronome={isMetronome}
-        onToggleMetronome={() => setIsMetronome((v) => !v)}
-        onModeChange={handleModeChange}
-        onReset={handleReset}
-        isListening={isListening}
-        isRequesting={isRequesting}
-        onToggleMic={handleToggleMic}
-        panelOpen={panelOpen}
-        panelView={panelView}
-        onTogglePanel={() => setPanelOpen(v => !v)}
-        onChangePanelView={setPanelView}
-        barHidden={barHidden}
-        onShowBar={showBar}
-      />
-      </>
+      {countdown && (
+        <div className="countdown-overlay" role="status" aria-live="assertive">
+          <div className="countdown-rings"><i /><i /><i /></div>
+          <small>PREPÁRATE</small>
+          <strong key={countdown}>{countdown}</strong>
+          <span>{gameMode === 'master' ? 'Escucha · respira · toca' : 'Sigue el pulso'}</span>
+        </div>
       )}
+
+      {showCamera && (
+        <div className="game-modal-backdrop" onClick={(event) => event.target === event.currentTarget && setShowCamera(false)}>
+          <section className="game-tool-sheet">
+            <header><div><small>COACH VISUAL</small><strong>Posición de la mano</strong></div><button type="button" onClick={() => setShowCamera(false)}>×</button></header>
+            <CameraCoach />
+          </section>
+        </div>
+      )}
+
+      {showCalibration && (
+        <div className="game-modal-backdrop" onClick={(event) => event.target === event.currentTarget && setShowCalibration(false)}>
+          <Calibration
+            onComplete={() => setShowCalibration(false)}
+            initialTab={calibrationTab}
+            isListening={isListening}
+            startListening={startListening}
+            analyserRef={analyserRef}
+            measureAmbientRms={measureAmbientRms}
+          />
+        </div>
+      )}
+
+      {showDebugLog && <DebugLog onClose={() => setShowDebugLog(false)} />}
+      {micError && <div className="game-toast">No pudimos abrir el micrófono. Revisa el permiso del navegador.</div>}
     </div>
   )
 }
