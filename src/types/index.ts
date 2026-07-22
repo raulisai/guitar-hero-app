@@ -24,6 +24,21 @@ export interface ExpectedNote {
   chordMidis?: number[]
 }
 
+/** A playable note positioned on the score's absolute MIDI-tick timeline. */
+export interface TimelineNote {
+  id: string
+  midi: number
+  name: string
+  startTick: number
+  durationTicks: number
+  stringNumber: number
+  fretNumber: number
+  fingerNumber: 0 | 1 | 2 | 3 | 4
+  bar: number
+  beat: number
+  chordId: string
+}
+
 export type NoteResult = 'perfect' | 'good' | 'late' | 'early' | 'wrong' | 'miss'
 
 export interface NoteAttempt {

@@ -2,8 +2,8 @@
   --game-bg: #02060b;
   --game-panel: rgba(8, 13, 21, 0.9);
   --game-panel-strong: #080d15;
-  --game-border: rgba(131, 151, 181, 0.22);
-  --game-border-soft: rgba(131, 151, 181, 0.12);
+  --game-border: rgba(143, 163, 194, 0.14);
+  --game-border-soft: rgba(143, 163, 194, 0.075);
   --game-text: #f4f5f8;
   --game-muted: #858c9b;
   --game-violet: #b768ff;
@@ -78,9 +78,10 @@ body:has(.game-app) {
   border: 1px solid var(--game-border);
   border-radius: 20px;
   background:
-    linear-gradient(125deg, rgba(255,255,255,.025), transparent 34%),
-    linear-gradient(145deg, rgba(9,15,25,.97), rgba(3,8,14,.96));
-  box-shadow: 0 18px 50px rgba(0,0,0,.28), inset 0 1px rgba(255,255,255,.025);
+    linear-gradient(125deg, rgba(255,255,255,.018), transparent 34%),
+    linear-gradient(145deg, rgba(9,15,25,.82), rgba(3,8,14,.78));
+  box-shadow: 0 16px 44px rgba(0,0,0,.22), inset 0 1px rgba(255,255,255,.018);
+  backdrop-filter: blur(10px);
   animation: card-arrive .55s cubic-bezier(.2,.8,.2,1) both;
 }
 .game-card + .game-card { margin-top: 16px; }
@@ -307,13 +308,61 @@ body:has(.game-app) {
 .highway-string-line::after { content:""; position:absolute; inset:-2px 0; background:linear-gradient(90deg, transparent 0%, rgba(255,255,255,.85) 50%, transparent 100%); opacity:0; transform:translateX(-100%); }
 .guitar-highway[data-live="true"] .highway-string-line::after { opacity:.35; animation:string-scan 2.3s linear infinite; }
 .highway-string-line i { position:absolute; top:50%; width:7px; height:7px; transform:translate(-50%,-50%) rotate(45deg); border:1px solid color-mix(in srgb, var(--string-color) 45%, #777); background:#151b28; }
-.highway-note { position:absolute; z-index:10; top:50%; width:76px; height:38px; transform:translate(-50%,-50%); filter:drop-shadow(0 0 9px color-mix(in srgb, var(--string-color) 70%, transparent)); animation:note-enter .38s cubic-bezier(.2,.9,.2,1) both; }
-.highway-note::before { content:""; position:absolute; inset:0; clip-path:polygon(13% 0,87% 0,100% 50%,87% 100%,13% 100%,0 50%); border-radius:8px; background:var(--string-color); }
-.highway-note::after { content:""; position:absolute; inset:3px; clip-path:polygon(13% 0,87% 0,100% 50%,87% 100%,13% 100%,0 50%); background:linear-gradient(145deg, color-mix(in srgb, var(--string-color) 22%, #111827), #070b12); }
-.highway-note span { position:absolute; z-index:2; inset:0; display:grid; place-items:center; color:#fff; font-size:18px; font-weight:750; text-shadow:0 1px 4px #000; }
-.highway-note.is-current { width:64px; }
-.guitar-highway[data-result="perfect"] .highway-note.is-current,.guitar-highway[data-result="good"] .highway-note.is-current { animation:note-success .5s ease both; }
+.highway-note-rail {
+  position:absolute;
+  z-index:10;
+  top:50%;
+  left:var(--note-left);
+  width:var(--note-length);
+  height:38px;
+  transform:translateY(-50%);
+  filter:drop-shadow(0 0 8px color-mix(in srgb, var(--string-color) 68%, transparent));
+  transition:left 45ms linear, opacity .18s ease, filter .18s ease;
+  will-change:left;
+}
+.highway-note-tail {
+  position:absolute;
+  z-index:1;
+  left:0;
+  right:0;
+  top:50%;
+  height:12px;
+  transform:translateY(-50%);
+  border:1px solid color-mix(in srgb, var(--string-color) 72%, white 10%);
+  border-radius:999px;
+  background:linear-gradient(180deg, color-mix(in srgb, var(--string-color) 52%, white 8%), color-mix(in srgb, var(--string-color) 22%, #07101a));
+  box-shadow:0 0 13px color-mix(in srgb, var(--string-color) 54%, transparent), inset 0 0 8px rgba(255,255,255,.22);
+  opacity:.72;
+}
+.highway-note-tail::after {
+  content:"";
+  position:absolute;
+  inset:2px 5px;
+  border-radius:999px;
+  background:linear-gradient(90deg, rgba(255,255,255,.72), transparent 75%);
+  opacity:.42;
+}
+.highway-note-head {
+  position:absolute;
+  z-index:3;
+  left:0;
+  top:50%;
+  width:64px;
+  height:38px;
+  transform:translate(-50%,-50%);
+  filter:drop-shadow(0 0 8px color-mix(in srgb, var(--string-color) 78%, transparent));
+}
+.highway-note-head::before { content:""; position:absolute; inset:0; clip-path:polygon(13% 0,87% 0,100% 50%,87% 100%,13% 100%,0 50%); border-radius:8px; background:var(--string-color); }
+.highway-note-head::after { content:""; position:absolute; inset:3px; clip-path:polygon(13% 0,87% 0,100% 50%,87% 100%,13% 100%,0 50%); background:linear-gradient(145deg, color-mix(in srgb, var(--string-color) 22%, #111827), #070b12); }
+.highway-note-head b { position:absolute; z-index:2; inset:0; display:grid; place-items:center; color:#fff; font-size:18px; font-weight:750; text-shadow:0 1px 4px #000; }
+.highway-note-rail:not(.is-sustained) .highway-note-tail { opacity:.42; }
+.highway-note-rail.is-current { z-index:14; filter:drop-shadow(0 0 13px color-mix(in srgb, var(--string-color) 92%, transparent)); }
+.highway-note-rail.is-current .highway-note-head { animation:note-current 1s ease-in-out infinite; }
+.highway-note-rail.is-passed { opacity:.16; }
+.guitar-highway[data-result="perfect"] .highway-note-rail.is-current .highway-note-head,.guitar-highway[data-result="good"] .highway-note-rail.is-current .highway-note-head { animation:note-success .5s ease both; }
 .guitar-highway[data-result="wrong"] .highway-playhead,.guitar-highway[data-result="miss"] .highway-playhead { border-color:#ff5b5b; box-shadow:0 0 22px rgba(255,70,70,.6); }
+.highway-loading { position:absolute; z-index:5; inset:44px 20px 54px 68px; display:flex; align-items:center; justify-content:center; gap:8px; color:#626b79; font-size:10px; pointer-events:none; }
+.highway-loading i { width:7px; height:7px; border-radius:50%; background:var(--game-violet); box-shadow:0 0 12px var(--game-violet); animation:listen-pulse 1.2s ease-in-out infinite; }
 .highway-ruler { display:grid; grid-template-columns:90px repeat(4,1fr); align-items:end; height:49px; color:#676e7c; }
 .highway-ruler > span { font-size:11px; }
 .highway-ruler strong { position:relative; display:flex; justify-content:space-between; align-items:flex-end; padding:0 12px; font-size:18px; font-weight:500; }
@@ -431,6 +480,7 @@ body:has(.game-app) {
 @keyframes callout-pulse { 50% { opacity:.7; text-shadow:0 0 22px rgba(183,104,255,1); } }
 @keyframes string-scan { to { transform:translateX(100%); } }
 @keyframes note-enter { from { opacity:0; transform:translate(-40%,-50%) scale(.78); } to { opacity:1; transform:translate(-50%,-50%) scale(1); } }
+@keyframes note-current { 50% { transform:translate(-50%,-50%) scale(1.06); filter:brightness(1.2); } }
 @keyframes note-success { 35% { transform:translate(-50%,-50%) scale(1.24); filter:drop-shadow(0 0 18px #fff); } to { transform:translate(-50%,-50%) scale(1); } }
 @keyframes particle-rise { 0% { opacity:0; transform:translate(0,16px) scale(.5); } 35% { opacity:.8; } 100% { opacity:0; transform:translate(30px,-60px) scale(1.5); } }
 @keyframes transport-ring { to { transform:rotate(360deg); } }
@@ -559,4 +609,165 @@ body:has(.game-app) {
   .control-toggle > svg,.repeat-control > svg { display:none; }
   .control-toggle,.repeat-control { gap:0; }
   .control-status > div > span:first-child { display:none; }
+}
+
+/* Phone layout: every surface fits the viewport; the transport stays reachable. */
+@media (max-width: 760px) {
+  .game-app { width:100vw; min-width:0; }
+  .game-topbar {
+    grid-template-columns:40px minmax(0,1fr) 54px 40px;
+    gap:6px;
+    width:100%;
+    height:62px;
+    padding:8px;
+  }
+  .topbar-icon-button,.song-search-trigger,.streak-button { height:42px; border-color:rgba(143,163,194,.12); background:rgba(5,9,15,.62); }
+  .topbar-icon-button,.song-search-trigger,.streak-button { width:100%; min-width:0; max-width:100%; overflow:hidden; }
+  .topbar-icon-button { border-radius:14px; }
+  .song-search-trigger { padding:0 10px; border-radius:16px; }
+  .streak-button { border-radius:14px; }
+
+  .game-screen {
+    width:100%;
+    max-width:100vw;
+    height:calc(100svh - 62px);
+    padding:5px 8px calc(136px + env(safe-area-inset-bottom));
+    overflow-x:hidden;
+    touch-action:pan-y;
+  }
+  .game-card { max-width:100%; border-color:rgba(143,163,194,.105); border-radius:14px; box-shadow:0 10px 28px rgba(0,0,0,.18); }
+  .game-card + .game-card { margin-top:8px; }
+
+  .song-overview {
+    min-height:96px;
+    grid-template-columns:16% minmax(0,56%) minmax(0,28%);
+    gap:0;
+    padding:9px;
+  }
+  .song-cover-wrap { width:58px; height:58px; }
+  .song-cover { border-radius:9px; }
+  .song-overview__copy { min-width:0; padding:0 8px; }
+  .song-overview__copy h1 { max-width:100%; font-size:16px; }
+  .song-overview__copy > p { margin:3px 0 7px; font-size:11px; }
+  .song-meta { gap:5px; font-size:7px; }
+  .song-meta span:first-child { flex-basis:auto; }
+  .song-objective { width:100%; min-width:0; min-height:72px; padding:8px 4px; border-color:rgba(125,148,190,.22); border-radius:13px; background:rgba(18,25,38,.48); overflow:hidden; }
+  .song-objective > span { font-size:7px; }
+  .song-objective > strong { margin:3px 0; font-size:25px; }
+  .song-objective > small { font-size:7px; line-height:1.25; }
+
+  .note-coach {
+    min-height:94px;
+    grid-template-columns:15% 18% 29% 38%;
+    padding:7px 6px;
+  }
+  .note-coach > div { min-width:0; overflow:hidden; }
+  .note-coach > div:not(:last-child) { min-height:68px; border-right-color:rgba(130,150,180,.07); }
+  .note-coach__image img { width:50px; height:68px; }
+  .note-coach__note { padding-left:8px; }
+  .note-coach__note span { font-size:8px; }
+  .note-coach__note strong { font-size:32px; }
+  .note-coach__position { gap:2px; padding-left:9px; font-size:7.5px; }
+  .finger-chip { margin-top:2px; padding:3px 6px; font-size:6px; }
+  .note-coach__tip { gap:5px; padding-left:9px; }
+  .note-coach__tip strong { padding:4px 6px; font-size:7px; }
+  .note-coach__tip svg { width:11px; height:11px; }
+  .note-coach__tip span { font-size:6.5px; line-height:1.35; }
+
+  .guitar-highway { min-height:316px; padding:38px 8px 7px; }
+  .guitar-highway::before { opacity:.15; }
+  .highway-callout { top:6px; left:15%; font-size:10px; }
+  .highway-grid { inset:27px 8px 43px 43px; }
+  .highway-playhead { top:31px; bottom:45px; width:26px; border-color:rgba(230,201,255,.64); }
+  .highway-playhead::before { inset:-8px -12px; }
+  .highway-playhead > span { width:10px; height:10px; }
+  .highway-lane { height:36px; }
+  .highway-string-label { width:27px; height:27px; border-width:1.5px; font-size:14px; }
+  .highway-string-line { left:35px; height:1px; }
+  .highway-string-line i { width:5px; height:5px; }
+  .highway-note-rail { height:29px; transition:left 42ms linear, opacity .16s ease; }
+  .highway-note-head { width:48px; height:29px; }
+  .highway-note-head b { font-size:13px; }
+  .highway-note-tail { height:9px; }
+  .highway-ruler { grid-template-columns:52px repeat(4,1fr); height:40px; }
+  .highway-ruler > span { font-size:6.5px; }
+  .highway-ruler strong { padding:0 5px; font-size:12px; }
+  .highway-ruler strong::before { top:-7px; width:4px; height:4px; }
+  .highway-ruler strong small { font-size:7px; }
+  .highway-loading { inset:38px 10px 43px 42px; font-size:8px; }
+
+  .notation-card,.notation-card .score-viewer { height:158px; min-height:158px; }
+  .notation-card .score-scroll { padding-top:17px; }
+  .notation-card .score-canvas { min-width:600px; transform:scale(.76); width:131.6%; }
+  .notation-card .alphatab-target { min-height:170px; }
+  .notation-card > header { top:6px; left:10px; right:10px; }
+
+  .beat-status { min-height:44px; grid-template-columns:1fr 1.1fr; gap:5px; padding:7px 10px; }
+  .beat-pulse { gap:12px; }
+
+  .control-deck {
+    position:fixed;
+    z-index:150;
+    left:max(6px, env(safe-area-inset-left));
+    right:max(6px, env(safe-area-inset-right));
+    bottom:max(6px, env(safe-area-inset-bottom));
+    width:auto;
+    margin:0;
+    overflow:visible;
+    border-color:rgba(162,180,211,.14);
+    background:rgba(5,10,18,.91);
+    box-shadow:0 -12px 45px rgba(0,0,0,.5), inset 0 1px rgba(255,255,255,.025);
+    backdrop-filter:blur(20px);
+  }
+  .control-deck__main {
+    min-height:76px;
+    grid-template-columns:18% 18% 20% 24% 14% 6%;
+    gap:0;
+    padding:7px;
+  }
+  .control-toggle,.repeat-control { width:calc(100% - 4px); min-width:0; height:52px; gap:4px; padding:3px; overflow:hidden; border-color:rgba(131,151,181,.1); border-radius:12px; background:rgba(5,10,17,.5); }
+  .control-toggle > svg,.repeat-control > svg { width:18px; height:18px; flex:0 0 auto; }
+  .control-toggle strong,.repeat-control strong { font-size:6.5px; }
+  .control-toggle small,.repeat-control small { font-size:6.5px; }
+  .transport-button { width:60px; height:60px; border-width:1.5px; }
+  .transport-button svg { width:24px; height:24px; }
+  .speed-control { min-width:0; gap:5px; overflow:hidden; }
+  .speed-control > span { font-size:7px; }
+  .speed-control div { gap:3px; }
+  .speed-control button { width:20px; height:20px; font-size:10px; }
+  .speed-control strong { min-width:27px; font-size:8px; }
+  .deck-options-trigger { justify-self:center; width:calc(100% - 2px); min-width:18px; max-width:22px; height:38px; }
+  .control-status { min-height:38px; padding:7px 11px; }
+  .control-status > strong { font-size:8px; }
+  .control-status > div { font-size:7px; }
+  .control-status > div strong { padding:3px 6px; }
+  .control-status > div svg { width:15px; height:15px; }
+  .control-cloud { position:fixed; left:10px; right:10px; bottom:calc(124px + env(safe-area-inset-bottom)); width:auto; }
+}
+
+@media (max-width: 430px) {
+  .game-topbar { grid-template-columns:36px minmax(0,1fr) 46px 36px; gap:5px; padding:7px 6px; }
+  .topbar-icon-button,.song-search-trigger,.streak-button { height:40px; }
+  .song-search-trigger span { font-size:9px; }
+  .streak-button small { display:none; }
+  .song-overview { grid-template-columns:15% minmax(0,57%) minmax(0,28%); gap:0; padding:7px; }
+  .song-cover-wrap { width:52px; height:52px; }
+  .song-overview__copy h1 { font-size:14px; }
+  .song-overview__copy > p { font-size:9px; }
+  .song-meta { font-size:6.5px; }
+  .song-objective > strong { font-size:22px; }
+  .note-coach { grid-template-columns:14% 18% 30% 38%; padding:6px 4px; }
+  .note-coach__image img { width:43px; }
+  .note-coach__note { padding-left:6px; }
+  .note-coach__note strong { font-size:28px; }
+  .note-coach__position,.note-coach__tip { padding-left:6px; }
+  .note-coach__tip span { font-size:5.8px; }
+  .control-deck__main { grid-template-columns:18% 18% 20% 24% 14% 6%; gap:0; padding:6px; }
+  .control-toggle > svg,.repeat-control > svg { display:block; }
+  .control-toggle > span { align-items:center; }
+  .control-toggle strong { display:none; }
+  .repeat-control { gap:2px; }
+  .repeat-control strong { display:none; }
+  .transport-button { width:56px; height:56px; }
+  .control-status > strong { max-width:48vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 }

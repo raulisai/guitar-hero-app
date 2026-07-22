@@ -6,6 +6,7 @@ import { midiToNoteName } from '../utils/noteUtils'
 import { getFingeringSuggestion } from '../utils/fingeringUtils'
 import type { ExpectedNote } from '../types'
 import { findNextPlayableLessonBeat, findPlayableLessonBeat } from '../game/lessonNavigator'
+import { buildHighwayTimeline, getTimelineEndTick, toTabStringNumber } from '../game/highwayTimeline'
 
 // Standard guitar range: E2 (MIDI 40) to E6 (MIDI 88)
 const GUITAR_MIDI_MIN = 40
@@ -15,12 +16,6 @@ function clampToGuitarMidi(midi: number): number {
   while (midi < GUITAR_MIDI_MIN) midi += 12
   while (midi > GUITAR_MIDI_MAX) midi -= 12
   return midi
-}
-
-// AlphaTab's model numbers strings from the lowest-pitched string upward,
-// while guitar tablature labels string 1 as high E and string 6 as low E.
-function toTabStringNumber(alphaTabString: number): number {
-  return alphaTabString >= 1 && alphaTabString <= 6 ? 7 - alphaTabString : alphaTabString
 }
 
 const { PlayerState } = alphaTab.synth
@@ -86,11 +81,13 @@ export function useAlphaTab(
   const lastFreeBeatKey   = useRef<string>('')   // debounce free-mode state updates
   const currentLessonBeatRef = useRef<LessonBeatLookup | null>(null)
   const startLessonRef = useRef<(() => void) | null>(null)
+  const lastHighwayFrameRef = useRef(0)
   const gameMode = useGameStore(s => s.gameMode)
   const isMuted = useGameStore(s => s.isMuted)
   const {
     setExpectedNote, setGameState, updatePosition,
     setCurrentBeatBounds, setCurrentTabBounds, setAdvanceLesson,
+    setNoteTimeline, setPlaybackTick,
   } = useGameStore(useShallow((state) => ({
     setExpectedNote: state.setExpectedNote,
     setGameState: state.setGameState,
@@ -98,6 +95,8 @@ export function useAlphaTab(
     setCurrentBeatBounds: state.setCurrentBeatBounds,
     setCurrentTabBounds: state.setCurrentTabBounds,
     setAdvanceLesson: state.setAdvanceLesson,
+    setNoteTimeline: state.setNoteTimeline,
+    setPlaybackTick: state.setPlaybackTick,
   })))
 
   const getOrCreateApi = useCallback(() => {
@@ -128,6 +127,7 @@ export function useAlphaTab(
       // Moving the cursor directly is reliable on mobile and avoids repeatedly
       // pausing/resuming AlphaSynth between notes and rests.
       api.tickPosition = lookup.start
+      setPlaybackTick(lookup.start)
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const boundsLookup = (api as any).renderer?.boundsLookup
@@ -201,11 +201,19 @@ export function useAlphaTab(
       setGameState('idle')
       lastFreeBeatKey.current = ''
       currentLessonBeatRef.current = null
+      const timeline = buildHighwayTimeline(api.score)
+      setNoteTimeline(timeline, getTimelineEndTick(timeline))
       const bpm = api.score?.tempo ?? 0
       if (bpm > 0) useGameStore.getState().setSongBpm(bpm)
     })
 
     api.playerPositionChanged.on((args: PositionChangedEventArgs) => {
+      const now = performance.now()
+      if (now - lastHighwayFrameRef.current >= 24 || args.currentTick === 0) {
+        lastHighwayFrameRef.current = now
+        setPlaybackTick(args.currentTick)
+      }
+
       const trackIndices = new Set<number>([0])
       const lookupResult = api.tickCache?.findBeat(trackIndices, args.currentTick)
       if (!lookupResult?.beat || lookupResult.beat.notes.length === 0) return
@@ -259,7 +267,7 @@ export function useAlphaTab(
     })
 
     return api
-  }, [containerRef, scrollRef, setExpectedNote, setGameState, updatePosition, setCurrentBeatBounds, setCurrentTabBounds, setAdvanceLesson])
+  }, [containerRef, scrollRef, setExpectedNote, setGameState, updatePosition, setCurrentBeatBounds, setCurrentTabBounds, setAdvanceLesson, setNoteTimeline, setPlaybackTick])
 
   const loadSong = useCallback(
     (file?: File | string) => {
@@ -269,6 +277,8 @@ export function useAlphaTab(
       try { api.stop() } catch { /* ignore if no score loaded yet */ }
       lastFreeBeatKey.current = ''
       currentLessonBeatRef.current = null
+      lastHighwayFrameRef.current = 0
+      setNoteTimeline([], 0)
 
       if (file instanceof File) {
         const reader = new FileReader()
@@ -283,7 +293,7 @@ export function useAlphaTab(
         api.load(file as string)
       }
     },
-    [getOrCreateApi]
+    [getOrCreateApi, setNoteTimeline]
   )
 
   const initialize = useCallback((file?: File | string) => { loadSong(file) }, [loadSong])
@@ -299,7 +309,8 @@ export function useAlphaTab(
     lastFreeBeatKey.current = ''
     currentLessonBeatRef.current = null
     apiRef.current?.stop()
-  }, [])
+    setPlaybackTick(0)
+  }, [setPlaybackTick])
   const setTempo = useCallback((ratio: number) => {
     if (apiRef.current) apiRef.current.playbackSpeed = ratio
   }, [])

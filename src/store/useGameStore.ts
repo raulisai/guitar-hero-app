@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { DetectedNote, ExpectedNote, NoteAttempt, GameState, GameMode, Score, BeatBounds } from '../types'
+import type { DetectedNote, ExpectedNote, NoteAttempt, GameState, GameMode, Score, BeatBounds, TimelineNote } from '../types'
 import { applyAttemptToScore, EMPTY_SCORE, evaluateAttempt } from '../game/noteEvaluation'
 
 interface FailedBeatOverlay {
@@ -30,6 +30,9 @@ interface GameStore {
   detectedNote: DetectedNote | null
   currentBar: number
   currentBeat: number
+  noteTimeline: TimelineNote[]
+  playbackTick: number
+  songEndTick: number
 
   // Visual beat tracking
   currentBeatBounds: BeatBounds | null
@@ -51,6 +54,8 @@ interface GameStore {
   setSongFile: (file: File) => void
   setExpectedNote: (note: ExpectedNote | null) => void
   setDetectedNote: (note: DetectedNote | null) => void
+  setNoteTimeline: (notes: TimelineNote[], endTick: number) => void
+  setPlaybackTick: (tick: number) => void
   setLatencyOffset: (offset: number) => void
   setNoiseFloor: (floor: number) => void
   setWaitMode: (v: boolean) => void
@@ -87,6 +92,9 @@ export const useGameStore = create<GameStore>()(
       detectedNote: null,
       currentBar: 0,
       currentBeat: 0,
+      noteTimeline: [],
+      playbackTick: 0,
+      songEndTick: 0,
       currentBeatBounds: null,
       currentTabBounds: null,
       failedBeatOverlays: [],
@@ -99,6 +107,8 @@ export const useGameStore = create<GameStore>()(
       setSongFile: (file) => set({ currentSongFile: file }),
       setExpectedNote: (note) => set({ expectedNote: note }),
       setDetectedNote: (note) => set({ detectedNote: note }),
+      setNoteTimeline: (notes, endTick) => set({ noteTimeline: notes, songEndTick: endTick, playbackTick: 0 }),
+      setPlaybackTick: (tick) => set({ playbackTick: Math.max(0, tick) }),
       setLatencyOffset: (offset) => set({ latencyOffset: offset, isCalibrated: true }),
       setNoiseFloor: (floor) => set({ noiseFloor: floor }),
       setWaitMode: (v) => set({ waitMode: v }),
@@ -153,6 +163,7 @@ export const useGameStore = create<GameStore>()(
           detectedNote: null,
           currentBar: 0,
           currentBeat: 0,
+          playbackTick: 0,
           currentBeatBounds: null,
           currentTabBounds: null,
           failedBeatOverlays: [],
