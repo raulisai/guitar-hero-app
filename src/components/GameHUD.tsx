@@ -20,10 +20,12 @@ export function GameHUD() {
   const lastAttempt = attempts.at(-1)
   const hasScore = attempts.length > 0
   const active = gameState === 'playing' || (gameMode === 'master' && gameState === 'paused')
+  const hits = score.perfect + score.good + score.late + score.early
+  const errors = score.wrong + score.miss
 
   if (!active && !hasScore) return null
 
-  const grade = gradeForAccuracy(score.accuracy)
+  const grade = hasScore ? gradeForAccuracy(score.accuracy) : '—'
   const feedbackColor = lastAttempt ? RESULT_COLORS[lastAttempt.result] : '#22c55e'
 
   return (
@@ -31,7 +33,7 @@ export function GameHUD() {
       <div className="game-hud__topline">
         <div>
           <span className="game-hud__eyebrow">PUNTUACIÓN</span>
-          <strong className="game-hud__points">{score.points.toLocaleString()}</strong>
+          <strong className="game-hud__points">{score.points.toLocaleString('es-ES')}</strong>
         </div>
         <div className="game-hud__grade" data-grade={grade}>{grade}</div>
       </div>
@@ -45,6 +47,12 @@ export function GameHUD() {
       <div className="game-hud__streak-row">
         <span className={score.streak >= 10 ? 'is-hot' : ''}>🔥 {score.streak} racha</span>
         <strong>x{score.multiplier}</strong>
+      </div>
+
+      <div className="game-hud__counts">
+        <span><b>{hits}</b> aciertos</span>
+        <span><b>{errors}</b> errores</span>
+        <span><b>{attempts.length}</b> notas</span>
       </div>
 
       {lastAttempt && (

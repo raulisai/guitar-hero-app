@@ -6,6 +6,7 @@ import { midiToNoteName } from '../utils/noteUtils'
 import { getFingeringSuggestion } from '../utils/fingeringUtils'
 import type { ExpectedNote } from '../types'
 import { findNextPlayableLessonBeat, findPlayableLessonBeat } from '../game/lessonNavigator'
+import { scrollScoreBeatIntoView } from '../game/scoreAutoScroll'
 
 // Standard guitar range: E2 (MIDI 40) to E6 (MIDI 88)
 const GUITAR_MIDI_MIN = 40
@@ -67,6 +68,7 @@ export function useAlphaTab(
   const lastFreeBeatKey   = useRef<string>('')   // debounce free-mode state updates
   const currentLessonBeatRef = useRef<LessonBeatLookup | null>(null)
   const startLessonRef = useRef<(() => void) | null>(null)
+  const scrollFrameRef = useRef<number | null>(null)
   const gameMode = useGameStore(s => s.gameMode)
   const isMuted = useGameStore(s => s.isMuted)
   const {
@@ -115,7 +117,20 @@ export function useAlphaTab(
       const beatBounds = boundsLookup?.findBeat(beat)
       if (beatBounds?.realBounds) {
         const { x, y, w, h } = beatBounds.realBounds
-        setCurrentBeatBounds({ x, y, w, h })
+        const activeBounds = { x, y, w, h }
+        setCurrentBeatBounds(activeBounds)
+
+        if (scrollFrameRef.current !== null) cancelAnimationFrame(scrollFrameRef.current)
+        scrollFrameRef.current = requestAnimationFrame(() => {
+          scrollFrameRef.current = requestAnimationFrame(() => {
+            const scrollElement = scrollRef.current
+            const scoreCanvas = containerRef.current?.parentElement
+            if (scrollElement && scoreCanvas) {
+              scrollScoreBeatIntoView(scrollElement, scoreCanvas, activeBounds)
+            }
+            scrollFrameRef.current = null
+          })
+        })
 
         type NoteBoundsEntry = { noteHeadBounds?: { x: number; y: number; w: number; h: number } }
         const withHeads = ((beatBounds.notes ?? []) as NoteBoundsEntry[])
@@ -301,6 +316,7 @@ export function useAlphaTab(
       apiRef.current?.destroy()
       apiRef.current = null
       startLessonRef.current = null
+      if (scrollFrameRef.current !== null) cancelAnimationFrame(scrollFrameRef.current)
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
